@@ -1,0 +1,15 @@
+services:
+  lct_middle_backend:
+    build:
+      context: .
+      dockerfile: deployments/Dockerfile
+    environment:
+      - PYTHONPATH=/app
+      - PYTHONBUFFERED=1
+    ports:
+      - "8080:80"
+    networks:
+      - lct_network
+
+networks:
+  lct_network:
