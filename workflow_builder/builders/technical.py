@@ -1,4 +1,3 @@
-from ..states import WorkflowState
 from .base import BaseHandlersCreator
 from ..handlers import HandlerMeta, TechnicalHandler
 from collections import defaultdict
@@ -13,16 +12,20 @@ class WorkflowTechnicalHandlersCreator(BaseHandlersCreator[TechnicalHandler]):
                 state_meta.variable
             }
             local_context = set(self.context.keys()) & full_state_context
-            model = self.model(
-                state_uid=self.workflow_state.id,
-                metadata=state_meta,
-                context={key: self.context[key] for key in local_context},
-            )
-            handlers[self.workflow_state.id].append(model)
+            model = self.create_handler(state_meta, handler_context=local_context)
+            handlers[self.workflow_state.uid].append(model)
         return handlers
+
+    def create_handler(self, metadata, handler_context):
+        return self.model(
+            state_uid=self.workflow_state.uid,
+            metadata=metadata,
+            context={key: self.context[key] for key in handler_context},
+        )
 
 
 if __name__ == "__main__":
+    from ..states import WorkflowState
     obj = WorkflowTechnicalHandlersCreator(
         workflow_state=WorkflowState(),  # тут объект воркфлоу
         context={"x": None, "z": 1, "y": 7, "l": 4},

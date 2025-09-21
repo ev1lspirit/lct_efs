@@ -1,16 +1,16 @@
-from utils import field_typechecker
+#from utils import state_typechecker
 from ..handlers import HandlerClass, HandlerMeta
-from ..states import WorkflowState
 from attr import define, field
 from abc import ABC, abstractmethod
-from typing import Any, Generic, get_args
+from typing import TYPE_CHECKING, Any, Generic, get_args
+
+if TYPE_CHECKING:
+    from ..states import WorkflowState
 
 
 @define
 class BaseHandlersCreator(Generic[HandlerClass], ABC):
-    workflow_state: WorkflowState = field(
-        validator=field_typechecker(type_=WorkflowState)
-    )
+    workflow_state: 'WorkflowState' = field()
     context: dict[str, Any] = field()
     handlers: list[HandlerMeta] = field()
 
@@ -21,3 +21,6 @@ class BaseHandlersCreator(Generic[HandlerClass], ABC):
 
     @abstractmethod
     def __call__(self) -> Any: ...
+
+    @abstractmethod
+    def create_handler(self, metadata, handler_context): ...

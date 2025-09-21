@@ -1,4 +1,5 @@
 from typing import Any, Type
+from workflow_builder.states import WorkflowState
 
 
 def field_typechecker(type_: Type[Any]):
@@ -10,3 +11,7 @@ def field_typechecker(type_: Type[Any]):
             )
 
     return inner_handler
+
+
+def state_typechecker():
+    return field_typechecker(type_=WorkflowState)

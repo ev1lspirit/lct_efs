@@ -1,7 +1,5 @@
 from dataclasses import dataclass
 from attr import define
-
-
 from functools import cached_property
 from typing import Any, TypeVar
 from uuid import UUID

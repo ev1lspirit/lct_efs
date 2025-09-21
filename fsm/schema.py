@@ -28,6 +28,7 @@ class VariableMatchCondition(BaseModel):
     operator: Optional[str] = None
     argument: Optional[Union[str, int, float, List[Any]]] = None
 
+
 class BetweenMatchCondition:
     var: Optional[str] = None
     between: Optional[List[Any]] = None
