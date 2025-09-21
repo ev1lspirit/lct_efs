@@ -1,0 +1,27 @@
+{
+    "data": {
+        // копия локального контекста
+        "context": "base64-encoded строка вида x=1;y=5;z=[1,2,4,5];",
+        "state_set": [
+            {
+                "type": "Technical",
+                // $ - Указатель переменной контекста
+                "executables": "($flight_date>$ts_start && $flight_date<ts_end);($phone in $phones_from_integration);"
+            },
+            {
+                "type": "Screen",
+                "widgets": [
+                    {
+                        "uid": "uid",
+                        "type": "Button",
+                        "context_dependencies": "$var1;$var2;$var3",
+                        "metadata": {
+                            // Тут расположение на экране и любая другая мета
+
+                        }
+                    }
+                ]
+            }
+        ]
+        // To be continued
+}
