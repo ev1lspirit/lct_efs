@@ -1,8 +1,8 @@
 from context import SessionContext
-from ..handlers import HandlerClass, HandlerMeta
+from ..handlers import HandlerClass, IntegrationStateAction, TechnicalStateAction
 from attr import define, field
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, ClassVar, Generic, get_args
+from typing import TYPE_CHECKING, Any, ClassVar, Generic, Union, get_args
 
 if TYPE_CHECKING:
     from ..states import WorkflowState
@@ -10,8 +10,8 @@ if TYPE_CHECKING:
 
 @define
 class BaseHandlersCreator(Generic[HandlerClass], ABC):
-    workflow_state: 'WorkflowState' = field()
-    handlers: list[HandlerMeta] = field()
+    workflow_state: "WorkflowState" = field()
+    handlers: list[Union[TechnicalStateAction, IntegrationStateAction]] = field()
     context: ClassVar[SessionContext] = SessionContext()
 
     def __init_subclass__(cls, **kwargs) -> None:
@@ -22,5 +22,9 @@ class BaseHandlersCreator(Generic[HandlerClass], ABC):
     @abstractmethod
     def __call__(self) -> Any: ...
 
-    @abstractmethod
-    def create_handler(self, metadata, handler_context): ...
+    def create_handler(self, metadata, handler_context, **kwargs):
+        return self.model(
+            metadata=metadata,
+            context=handler_context,
+            **kwargs
+        )
