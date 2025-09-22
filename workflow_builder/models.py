@@ -15,7 +15,7 @@ class StateTypeEnum(StrEnum):
 
 
 state_mapping: dict[StateTypeEnum, Type[BaseHandlersCreator]] = {
-    StateTypeEnum.technical: WorkflowTechnicalHandlersCreator,
+    StateTypeEnum.technical: WorkflowTechnicalHandlersCreator
     # StateTypeEnum.screen: WorkflowScreenHandlersCreator,
     # StateTypeEnum.integration: WorkflowIntegrationHandlersCreator,
 }

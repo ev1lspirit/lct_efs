@@ -1,8 +1,8 @@
-#from utils import state_typechecker
+from context import SessionContext
 from ..handlers import HandlerClass, HandlerMeta
 from attr import define, field
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, Generic, get_args
+from typing import TYPE_CHECKING, Any, ClassVar, Generic, get_args
 
 if TYPE_CHECKING:
     from ..states import WorkflowState
@@ -11,8 +11,8 @@ if TYPE_CHECKING:
 @define
 class BaseHandlersCreator(Generic[HandlerClass], ABC):
     workflow_state: 'WorkflowState' = field()
-    context: dict[str, Any] = field()
     handlers: list[HandlerMeta] = field()
+    context: ClassVar[SessionContext] = SessionContext()
 
     def __init_subclass__(cls, **kwargs) -> None:
         """Инициализирует аттрибут :attr:`model` значением из тип-параметра генерика"""
