@@ -1,74 +1,89 @@
 import requests
 from requests.exceptions import RequestException, Timeout
+from pydantic import BaseModel, ValidationError
+from typing import Type, TypeVar, Any
+import time
+
+T = TypeVar("T", bound=BaseModel)
+
+
+class APIError(BaseModel):
+    error: bool
+    status_code: int | None = None
+    message: str | None = None
+    content: Any | None = None
 
 
 class CommonAdapter:
-    def __init__(self, base_url: str, default_headers: dict | None = None, timeout: int = 10):
-        """
-        :param base_url: базовый
-        :param default_headers: заголовки по умолчанию (например, {"Authorization": "Bearer ..."})
-        :param timeout: таймаут в секундах для всех запросов
-        """
-        self.base_url = base_url.rstrip("/")  # убираем лишний слэш
-        self.session = requests.Session()  # используем Session для повторного соединения
+    def __init__(self, base_url: str, default_headers: dict | None = None,
+                 timeout: int = 10, retries: int = 3, backoff: float = 1.0):
+        self.base_url = base_url.rstrip("/")
+        self.session = requests.Session()
         self.session.headers.update(default_headers or {})
         self.timeout = timeout
+        self.retries = retries
+        self.backoff = backoff
 
-    def _handle_response(self, response: requests.Response):
-        """Обработка ответа сервера с проверкой ошибок"""
-        try:
-            response.raise_for_status()  # выбросит исключение при 4xx/5xx
-        except requests.HTTPError as e:
-            return {
-                "error": True,
-                "status_code": response.status_code,
-                "message": str(e),
-                "content": response.text,
-            }
-
-        # пробуем распарсить JSON, иначе возвращаем текст
-        try:
-            return response.json()
-        except ValueError:
-            return response.text
-
-    def get(self, endpoint: str, params: dict | None = None, headers: dict | None = None):
-        """GET-запрос"""
+    def _request_handler(
+        self,
+        method: str,
+        endpoint: str,
+        response_model: Type[T] | None = None,
+        **kwargs
+    ) -> Any:
         url = f"{self.base_url}/{endpoint.lstrip('/')}"
 
-        try:
-            resp = self.session.get(url, params=params, headers=headers, timeout=self.timeout)
-            return self._handle_response(resp)
-        except (RequestException, Timeout) as e:
-            return {"error": True, "message": str(e)}
+        for attempt in range(1, self.retries + 1):
+            try:
+                resp = self.session.request(method, url, timeout=self.timeout, **kwargs)
+                resp.raise_for_status()
 
-    def post(self, endpoint: str, data: dict | None = None, json: dict | None = None,
-             headers: dict | None = None):
-        """POST-запрос"""
-        url = f"{self.base_url}/{endpoint.lstrip('/')}"
+                try:
+                    data = resp.json()
+                except ValueError:
+                    return resp.text
 
-        try:
-            resp = self.session.post(url, data=data, json=json, headers=headers, timeout=self.timeout)
-            return self._handle_response(resp)
-        except (RequestException, Timeout) as e:
-            return {"error": True, "message": str(e)}
+                # если массив → возвращаем список как есть
+                if isinstance(data, list):
+                    return data
 
-    def put(self, endpoint: str, json: dict | None = None, headers: dict | None = None):
-        """PUT-запрос"""
-        url = f"{self.base_url}/{endpoint.lstrip('/')}"
+                # если объект и указана модель → мапим
+                if isinstance(data, dict) and response_model:
+                    try:
+                        return response_model.model_validate(data)
+                    except ValidationError as e:
+                        return APIError(
+                            error=True,
+                            status_code=resp.status_code,
+                            message=f"Schema validation failed: {e}",
+                            content=data,
+                        )
 
-        try:
-            resp = self.session.put(url, json=json, headers=headers, timeout=self.timeout)
-            return self._handle_response(resp)
-        except (RequestException, Timeout) as e:
-            return {"error": True, "message": str(e)}
+                # если объект без модели → возвращаем dict
+                return data
 
-    def delete(self, endpoint: str, headers: dict | None = None):
-        """DELETE-запрос"""
-        url = f"{self.base_url}/{endpoint.lstrip('/')}"
+            except (RequestException, Timeout) as e:
+                if attempt == self.retries:
+                    return APIError(error=True, message=str(e))
+                time.sleep(self.backoff * attempt)
 
-        try:
-            resp = self.session.delete(url, headers=headers, timeout=self.timeout)
-            return self._handle_response(resp)
-        except (RequestException, Timeout) as e:
-            return {"error": True, "message": str(e)}
+            except requests.HTTPError as e:
+                return APIError(
+                    error=True,
+                    status_code=resp.status_code if 'resp' in locals() else None,
+                    message=str(e),
+                    content=resp.text if 'resp' in locals() else None,
+                )
+
+    # Методы-обертки
+    def get(self, endpoint: str, response_model: Type[T] | None = None, **kwargs):
+        return self._request_handler("get", endpoint, response_model, **kwargs)
+
+    def post(self, endpoint: str, response_model: Type[T] | None = None, **kwargs):
+        return self._request_handler("post", endpoint, response_model, **kwargs)
+
+    def put(self, endpoint: str, response_model: Type[T] | None = None, **kwargs):
+        return self._request_handler("put", endpoint, response_model, **kwargs)
+
+    def delete(self, endpoint: str, response_model: Type[T] | None = None, **kwargs):
+        return self._request_handler("delete", endpoint, response_model, **kwargs)
