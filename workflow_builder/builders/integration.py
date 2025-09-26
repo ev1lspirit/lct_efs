@@ -2,21 +2,12 @@ from typing import Type
 from ..builders.base import BaseHandlersCreator
 from ..handlers import IntegrationHandler
 
-
 class CommonAdapter:
-
-    def __init__(self, *args, **kwargs):
-        pass
-
+    pass
 
 class WorkflowIntegrationHandlersCreator(BaseHandlersCreator[IntegrationHandler]):
-    adapter: Type[CommonAdapter] = CommonAdapter
+    """ Создатель обработчиков интеграционных состояний """
+    adapter: Type['CommonAdapter'] = CommonAdapter
 
-    def __call__(self):
-        handlers = []
-        for state_meta in self.handlers:
-            model = self.create_handler(
-                state_meta, handler_context=self.context, adapter=self.adapter
-            )
-            handlers.append(model)
-        return handlers
+    def __call__(self, **kwargs):
+        return super().__call__(adapter=self.adapter(), **kwargs)

@@ -1,13 +1,13 @@
 from abc import ABC
 import inspect
 from typing import Any, NoReturn
-from .schema import State
+#from .schema import State
 
 
 class ValidatorDescriptor:
 
     def __init__(self):
-        self.fsm: list[State] = None
+        self.fsm: list = None
 
     def __set__(self, *args, **kwds) -> NoReturn:
         raise AttributeError("Can't set attribute")

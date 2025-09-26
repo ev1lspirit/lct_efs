@@ -1,37 +1,53 @@
 from __future__ import annotations
+
+from context import SessionContext
+from .automaton.automaton import Automaton
+context = SessionContext({"z": 1, "y": 7, "l": 4, "balance": 100, "x": None})
 from abc import ABC
 from typing import ClassVar
 import uuid
-from context import SessionContext
-from workflow_builder.handlers import IntegrationStateAction, TechnicalStateAction
-
-context = SessionContext({"z": 1, "y": 7, "l": 4, "x": None})
+from workflow_builder.handlers import Expression
+from workflow_builder.transitions import Transition
 from .models import StateTypeEnum, state_mapping
 
 
+
+
 class WorkflowState(ABC):
+    """ Базовое состояние """
     type_: ClassVar[StateTypeEnum]
     context: ClassVar[SessionContext] = SessionContext()
 
-    def __init__(self, transitions: list, handler_params: list):
+    def __init__(self, context_variable: str, transitions: list[Transition], expressions: list, initial_state: bool = False):
         self.uid = uuid.uuid4()
+        self.initial_state = initial_state
+        self.context_variable = context_variable
         self.state_local_context = {}
-        self.handler_params: list = handler_params
+        self.expressions: list = expressions
         self.transitions = transitions
-        exec_creator = self._resolve_exec_creator()
-        self.executables = exec_creator()
+        self.executables = self._create_exec_handlers()
+
+    @property
+    def transition_map(self) -> dict[str, Transition]:
+        return {t.state_id: t for t in self.transitions}
+
+    def _create_exec_handlers(self, **kwargs):
+        creator = self._resolve_exec_creator()
+        return creator(**kwargs)
 
     def _resolve_exec_creator(self):
         handlers_creator = state_mapping.get(self.type_)
         if handlers_creator is None:
-            # raise ValueError(f"Unsupported state type: {self.type_}")
             return lambda: {}
-        return handlers_creator(workflow_state=self, handlers=self.handler_params)
+        return handlers_creator(workflow_state=self, handlers=self.expressions)
 
-    def execute(self):
-        for executable in self.executables:
-            self.state_local_context.update(executable.result())
-        return self.state_local_context
+    def _bind_transtions_and_expressions(self):
+        bind_map = self.transition_map
+        for expr in self.expressions:
+            transition = bind_map.get(expr.transition_bind)
+            if transition is None:
+                raise ValueError(f"Transition with id={expr.transition_bind} not found")
+            expr.transition_bind_object = transition
 
     def __repr__(self):
         return f"<{self.__class__.__name__} uid={self.uid} type={self.type_}>"
@@ -40,38 +56,57 @@ class WorkflowState(ABC):
 class TechnicalState(WorkflowState):
     type_ = StateTypeEnum.technical
 
-
-class ScreenState(WorkflowState):
-    type_ = StateTypeEnum.screen
+    def __init__(self, context_variable: str, transitions: list[Transition], expressions: list, initial_state: bool = False):
+        super().__init__(context_variable, transitions, expressions, initial_state)
+        self._bind_transtions_and_expressions()
 
 
 class IntegrationState(WorkflowState):
     type_ = StateTypeEnum.integration
 
+    def __init__(
+        self,
+        context_variable: str,
+        transitions: list[Transition],
+        expressions: list,
+        initial_state: bool = False,
+    ):
+        super().__init__(context_variable, transitions, expressions, initial_state)
+        self._bind_transtions_and_expressions()
+
+
+class ScreenState(WorkflowState):
+    type_ = StateTypeEnum.screen
+
 
 if __name__ == "__main__":
     obj = TechnicalState(
-        transitions=[],
-        handler_params=[
-            TechnicalStateAction(
-                variable="x",
-                dependent_variables=["z", "y"],
-                expression="z*2-y",
-            )
+        initial_state=True,
+        context_variable="x",
+        transitions=[
+            Transition(case="True", state_id="next_id"),
+            Transition(case="False", state_id="prev_id"),
         ],
+        expressions=[
+            Expression.technical(
+                dependent_variables=["balance"],
+                expression="balance>0",
+            ).bind_transition(name="next_id")
+        ]
     )
     integration = IntegrationState(
-        transitions=[],
-        handler_params=[
-            IntegrationStateAction(
+        context_variable="z",
+        transitions=[
+            Transition(case="True", state_id="next_id")
+        ],
+        expressions=[
+            Expression.integration(
                 variable="z",
                 url="http://example.com",
                 params={"param": "value"},
-            )
+            ).bind_transition(name="next_id")
         ]
     )
-    print(SessionContext())
-    SessionContext().update({"z": 100})
-    local_context = obj.execute()
-    int_context = integration.execute()
-    SessionContext().update(local_context)
+    automaton = Automaton(states=[obj, integration])
+    for state in automaton:
+        print(state)
