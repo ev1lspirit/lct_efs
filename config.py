@@ -21,12 +21,19 @@ class Settings(BaseSettings):
     DB_USER = os.environ.get("DB_USER")
     DB_PASSWORD = quote_plus(os.environ.get("DB_PASSWORD", ""))
 
+    REDIS_HOST = os.environ.get("REDIS_HOST", "localhost")
+    REDIS_PORT = int(os.environ.get("REDIS_PORT", "6379"))
+
     @property
     def database_url(self):
         return (
             f"postgresql+asyncpg://{self.DB_USER}:{self.DB_PASSWORD}"
             f"@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
         )
+
+    @property
+    def redis_url(self):
+        return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}"
 
 
 settings = Settings()
