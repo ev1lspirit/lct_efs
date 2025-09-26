@@ -1,0 +1,51 @@
+{
+    "data": {
+        // копия локального контекста
+        "context": "base64-encoded строка вида x=1;y=5;z=[1,2,4,5];",
+        "state_set": [
+            {
+                "name": "Q1",
+                "type": "Integration",
+                "class": "Compliance", // Calls compliance integration class
+                // $ - Указатель переменной контекста
+                "context_dependencies": "$var1;$var2", // where to store integration result?
+                "transitions": [
+                    {
+                        "name": "next",
+                        "destination": "Q2"
+                    }
+                ]
+                // how to hardcode events
+            },
+            {
+                "name": "Q2",
+                "type": "Technical",
+                "executables": [
+                    {
+                        "store_in": "$fligt_date_correct",
+                        "exec": "($flight_date>$ts_start && $flight_date<ts_end)"
+                    },
+                    {
+                        "store_in": "$phone_correct",
+                        "exec": "$phone in $phones_from_integration"
+                    }
+                ]
+            },
+            {
+                "name": "Q3",
+                "type": "Screen",
+                "widgets": [
+                    {
+                        "uid": "uid",
+                        "type": "Dropdown",
+                        "context_dependencies": "base64-encoded строка вида $var1;$var2;$var3",
+                        "metadata": {
+                            // Тут расположение на экране и любая другая мета
+
+                        }
+                    }
+                ]
+            }
+        ]
+    }
+}
