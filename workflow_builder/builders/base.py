@@ -1,8 +1,7 @@
 from context import SessionContext
+from ..expressions import IntegrationStateExpression, TechnicalStateExpression
 from ..handlers import (
     HandlerClass,
-    IntegrationStateExpression,
-    TechnicalStateExpression,
 )
 from attr import define, field
 from abc import ABC
@@ -12,10 +11,10 @@ if TYPE_CHECKING:
     from ..states import WorkflowState
 
 
-
 @define
 class BaseHandlersCreator(Generic[HandlerClass], ABC):
-    """ Базовый создатель обработчиков состояний """
+    """Базовый создатель обработчиков состояний"""
+
     workflow_state: "WorkflowState" = field()
     handlers: list[Union[TechnicalStateExpression, IntegrationStateExpression]] = (
         field()
@@ -30,7 +29,9 @@ class BaseHandlersCreator(Generic[HandlerClass], ABC):
     def __call__(self, **kwargs):
         handlers = []
         for state_meta in self.handlers:
-            model = self.create_handler(state_meta, handler_context=self.context, **kwargs)
+            model = self.create_handler(
+                state_meta, handler_context=self.context, **kwargs
+            )
             handlers.append(model)
         return handlers
 

@@ -2,23 +2,29 @@ from __future__ import annotations
 
 from context import SessionContext
 from .automaton.automaton import Automaton
-context = SessionContext({"z": 1, "y": 7, "l": 4, "balance": 100, "x": None})
+
+context = SessionContext({"z": 1, "y": 7, "l": 4, "balance": 100, "x": 100})
 from abc import ABC
 from typing import ClassVar
 import uuid
-from workflow_builder.handlers import Expression
+from .expressions import Expression
 from workflow_builder.transitions import Transition
 from .models import StateTypeEnum, state_mapping
 
 
-
-
 class WorkflowState(ABC):
-    """ Базовое состояние """
+    """Базовое состояние"""
+
     type_: ClassVar[StateTypeEnum]
     context: ClassVar[SessionContext] = SessionContext()
 
-    def __init__(self, context_variable: str, transitions: list[Transition], expressions: list, initial_state: bool = False):
+    def __init__(
+        self,
+        context_variable: str,
+        transitions: list[Transition],
+        expressions: list,
+        initial_state: bool = False,
+    ):
         self.uid = uuid.uuid4()
         self.initial_state = initial_state
         self.context_variable = context_variable
@@ -56,7 +62,13 @@ class WorkflowState(ABC):
 class TechnicalState(WorkflowState):
     type_ = StateTypeEnum.technical
 
-    def __init__(self, context_variable: str, transitions: list[Transition], expressions: list, initial_state: bool = False):
+    def __init__(
+        self,
+        context_variable: str,
+        transitions: list[Transition],
+        expressions: list,
+        initial_state: bool = False,
+    ):
         super().__init__(context_variable, transitions, expressions, initial_state)
         self._bind_transtions_and_expressions()
 
@@ -88,25 +100,27 @@ if __name__ == "__main__":
             Transition(case="False", state_id="prev_id"),
         ],
         expressions=[
-            Expression.technical(
-                dependent_variables=["balance"],
-                expression="balance>0",
+            (
+                Expression.technical(
+                    dependent_variables=["balance"], expression="balance>0"
+                )
+                & Expression.technical(dependent_variables=["x"], expression="x>0")
             ).bind_transition(name="next_id")
-        ]
-    )
-    integration = IntegrationState(
-        context_variable="z",
-        transitions=[
-            Transition(case="True", state_id="next_id")
         ],
-        expressions=[
-            Expression.integration(
-                variable="z",
-                url="http://example.com",
-                params={"param": "value"},
-            ).bind_transition(name="next_id")
-        ]
     )
-    automaton = Automaton(states=[obj, integration])
+    # integration = IntegrationState(
+    #     context_variable="z",
+    #     transitions=[
+    #         Transition(case="True", state_id="next_id")
+    #     ],
+    #     expressions=[
+    #         Expression.integration(
+    #             variable="z",
+    #             url="http://example.com",
+    #             params={"param": "value"},
+    #         ).bind_transition(name="next_id")
+    #     ]
+    # )
+    automaton = Automaton(states=[obj])
     for state in automaton:
         print(state)
