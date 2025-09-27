@@ -1,8 +1,12 @@
 from functools import wraps
-from attr import define, field
+from attr import define, field, validators
 from functools import partial
 from typing import Any, Callable
 from workflow_builder.transitions import Transition
+import logging
+
+
+logger = logging.getLogger(__name__)
 
 
 # def typeassert(function: Callable = None, types: list[type] = []):
@@ -59,12 +63,17 @@ class BaseStateExpression:
 
     @transition_bind_object.setter
     def transition_bind_object(self, transition: Transition):
-        if not isinstance(transition, Transition):
-            raise ValueError(f"Expected Transition, got {type(transition).__name__}")
-        if transition.state_id != self.transition_bind:
-            raise ValueError(
-                f"Transition destination {transition.state_id} does not match bind id {self.transition_bind}"
-            )
+        if transition is not None:
+            if not isinstance(transition, Transition):
+                raise ValueError(f"Expected Transition, got {type(transition).__name__}")
+            if transition.state_id != self.transition_bind:
+                raise ValueError(
+                    f"Transition destination {transition.state_id} does not match bind id {self.transition_bind}"
+                )
+        else:
+            if self.transition_bind is not None:
+                logger.warning(f"Transition object is None while bind exists. Class: {self.__class__.__name__}")
+                raise ValueError("Transition object is None while bind exists. Please provide a valid Transition object")
         self._transition_bind_object = transition
 
     def bind_transition(self, name: str):
@@ -171,9 +180,13 @@ class TechnicalStateExpression(LogicalExpressionMixin, BaseStateExpression):
     Notes:
         TechnicalStateExpression is a subclass of BaseStateExpression
     """
-    # variable: str  # variable to be updated
-    dependent_variables: list[str]  # a list of dependent variables
-    expression: str = field()  # python execution lambda
+    variable: str = field(
+        validator=validators.instance_of(str)
+    )  # variable to be updated
+    dependent_variables: list[str] = field(
+        validator=validators.instance_of(list)
+    )  # a list of dependent variables
+    expression: str = field(validator=validators.instance_of(str))  # python execution lambda
 
 @define(slots=True)
 class ScreenStateExpression(BaseStateExpression):
@@ -195,7 +208,7 @@ class ScreenStateExpression(BaseStateExpression):
         >>> expr.event_name
         'submit'
     """
-    event_name: str = field()
+    event_name: str = field(validator=validators.instance_of(str))
 
 @define(slots=True)
 class IntegrationStateExpression(BaseStateExpression):
@@ -227,10 +240,15 @@ class IntegrationStateExpression(BaseStateExpression):
     Notes:
         IntegrationStateExpression is a subclass of BaseStateExpression
     """
-    variable: str = field()
-    url: str = field()  # endpoint URL
-    params: dict[str, Any] = field(default={})  # query or body params
-    method: str = field(default="get")  # GET, POST, etc.
+    variable: str = field(validator=validators.instance_of(str))
+    url: str = field(validator=validators.instance_of(str))  # endpoint URL
+    params: dict[str, Any] = field(
+        factory=dict, validator=validators.instance_of(dict)
+    )  # query or body params
+    method: str = field(
+        default="get",
+        validator=validators.in_(["get", "post", "put", "delete", "patch"]),
+    )  # HTTP method
 
 
 class Expression:
@@ -238,9 +256,10 @@ class Expression:
 
     @classmethod
     def technical(
-        cls, *, dependent_variables: list[str], expression: str
+        cls, *, variable: str, dependent_variables: list[str], expression: str
     ) -> "TechnicalStateExpression":
         return TechnicalStateExpression(
+            variable=variable,
             dependent_variables=dependent_variables, expression=expression
         )
 
@@ -253,7 +272,7 @@ class Expression:
         )
 
     @classmethod
-    def event(
+    def screen(
         cls, *, event_name: str
     ):
         return ScreenStateExpression(event_name=event_name)

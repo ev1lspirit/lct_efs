@@ -1,5 +1,6 @@
 from __future__ import annotations
 from functools import cached_property
+import logging
 from context import SessionContext
 from abc import ABC
 from typing import ClassVar
@@ -7,8 +8,10 @@ import uuid
 import json
 from workflow_builder.transitions import Transition
 from .models import StateTypeEnum, state_mapping
-from database.redis.service import RedisCache
+# from database.redis.service import RedisCache
 
+
+logger = logging.getLogger(__name__)
 
 class WorkflowState(ABC):
     """Базовое состояние"""
@@ -60,7 +63,9 @@ class WorkflowState(ABC):
         for expr in entity_value:
             transition = bind_map.get(expr.transition_bind)
             if transition is None:
-                raise ValueError(f"Transition with id={expr.transition_bind} not found")
+                class_name = self.__class__.__name__
+                logger.warning(f"Found unbound expression {expr.__class__.__name__} in {class_name} {self.name}. Please bind it to a transition")
+                transition = None
             expr.transition_bind_object = transition
 
     def __repr__(self):
@@ -93,11 +98,10 @@ class ScreenState(WorkflowState):
 
     def send_to_front(self) -> dict:
         """Получает экран из Redis по имени этого состояния и возвращает JSON для фронта"""
-        redis_cache = RedisCache()
+        redis_cache = {}
         screen_key = redis_cache.get_screen_key(self.name)
         screen_data = redis_cache.r.get(screen_key)
 
         if not screen_data:
             raise ValueError(f"Screen '{self.name}' not found in Redis")
-
         return json.loads(screen_data)

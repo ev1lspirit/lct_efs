@@ -7,7 +7,8 @@ from workflow_builder.expressions import (
     IntegrationStateExpression,
     TechnicalAndExpression,
     TechnicalOrExpression,
-    TechnicalStateExpression, ScreenStateExpression,
+    TechnicalStateExpression,
+    ScreenStateExpression
 )
 
 
