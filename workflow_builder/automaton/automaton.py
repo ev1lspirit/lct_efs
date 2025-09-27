@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, Optional
 from pydantic import BaseModel
 
 from workflow_builder.models import StateTypeEnum
+from workflow_builder.transitions import Transition
 
 if TYPE_CHECKING:
     from ..states import WorkflowState
@@ -62,6 +63,15 @@ class Automaton:
 
         return candidates
 
+    def check_candidates(self, candidates: list[Transition]):
+        if len(candidates) > 1:
+            logger.error(f"Multiple candidates found. Resolve ambiguity and pick one. Candidates: {candidates}")
+            return False
+        elif len(candidates) == 0:
+            logger.error("No candidates found. Transition is impossible.")
+            return False
+        return True
+
     def run(self):
         logger.info(f"Beginning pipeline with current state: {self.current_state.type_}")
         while True:
@@ -81,13 +91,7 @@ class Automaton:
             else:
                 candidates = self._get_transition_candidates_based_on_expressions()
 
-            if len(candidates) > 1:
-                logger.error(f"Multiple candidates found. Resolve ambiguity and pick one. Candidates: {candidates}")
-                break
-            elif len(candidates) == 0:
-                logger.error("No candidates found. Transition is impossible.")
-                break
-            else:
+            if self.check_candidates(candidates):
                 next_state_name = candidates[0].state_id
                 next_state_object = self.state_mapping.get(next_state_name)
                 if next_state_object is None:
@@ -96,6 +100,8 @@ class Automaton:
                         f"Next state {next_state_name} not found. Check if it was created."
                     )
                 self.current_state = next_state_object
+            else:
+                raise ValueError("Transition is impossible due to ambiguity or absence of candidates. Found candidates: {}".format(candidates))
 
     @classmethod
     def from_workflow_description(cls, workflow_description: BaseModel):

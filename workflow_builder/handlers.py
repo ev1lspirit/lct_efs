@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from functools import wraps
 import inspect
 from attr import define
-from typing import Any, Callable, TypeVar
+from typing import Any, Callable, Optional, TypeVar
 from workflow_builder.expressions import (
     IntegrationStateExpression,
     TechnicalAndExpression,
@@ -46,18 +46,19 @@ class BaseHandler(ABC):
     def result(self) -> Any:
         raise NotImplementedError
 
-@define
+
+@define(slots=True)
 class ScreenHandler(BaseHandler):
     metadata: ScreenStateExpression
     context: dict[str, Any]
 
-    def result(self, event_name: str = None) -> bool:
+    def result(self, event_name: Optional[str] = None) -> bool:
         """Проверяет, совпадает ли переданное событие с событием в metadata"""
         if event_name is None:
             return False
         return self.metadata.event_name == event_name
 
-@define
+@define(slots=True)
 class TechnicalHandler(BaseHandler):
     metadata: TechnicalStateExpression
     context: dict[str, Any]
