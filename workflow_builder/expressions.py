@@ -175,6 +175,27 @@ class TechnicalStateExpression(LogicalExpressionMixin, BaseStateExpression):
     dependent_variables: list[str]  # a list of dependent variables
     expression: str = field()  # python execution lambda
 
+@define(slots=True)
+class ScreenStateExpression(BaseStateExpression):
+    """
+    Screen state expression
+
+    ScreenStateExpression is a class that represents a state expression
+    that updates a screen state variable
+
+    Attributes:
+        event_name (str): event name to be triggered
+
+    Methods:
+        execute (SessionContext, **kwargs): execute expression (must be overridden by subclasses)
+
+    Examples:
+        >>> from workflow_builder.expressions import Expression
+        >>> expr = Expression.event(event_name="submit")
+        >>> expr.event_name
+        'submit'
+    """
+    event_name: str = field()
 
 @define(slots=True)
 class IntegrationStateExpression(BaseStateExpression):
@@ -235,7 +256,7 @@ class Expression:
     def event(
         cls, *, event_name: str
     ):
-        ...
+        return ScreenStateExpression(event_name=event_name)
 
 
 class TechnicalAndExpression(LogicalExpressionMixin, BaseStateExpression):
