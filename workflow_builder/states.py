@@ -4,8 +4,10 @@ from context import SessionContext
 from abc import ABC
 from typing import ClassVar
 import uuid
+import json
 from workflow_builder.transitions import Transition
 from .models import StateTypeEnum, state_mapping
+from database.redis.service import RedisCache
 
 
 class WorkflowState(ABC):
@@ -84,8 +86,18 @@ class ScreenState(WorkflowState):
         expressions: list,
         initial_state: bool = False,
     ):
-        self.events = []
         super().__init__(name=name, final=final, transitions=transitions, expressions=expressions, initial_state=initial_state)
 
     def _configure_transitions(self):
-        self._bind_transitions(entity="events")
+        self._bind_transitions(entity="expressions")
+
+    def send_to_front(self) -> dict:
+        """Получает экран из Redis по имени этого состояния и возвращает JSON для фронта"""
+        redis_cache = RedisCache()
+        screen_key = redis_cache.get_screen_key(self.name)
+        screen_data = redis_cache.r.get(screen_key)
+
+        if not screen_data:
+            raise ValueError(f"Screen '{self.name}' not found in Redis")
+
+        return json.loads(screen_data)

@@ -7,7 +7,7 @@ from workflow_builder.expressions import (
     IntegrationStateExpression,
     TechnicalAndExpression,
     TechnicalOrExpression,
-    TechnicalStateExpression,
+    TechnicalStateExpression, ScreenStateExpression,
 )
 
 
@@ -46,6 +46,16 @@ class BaseHandler(ABC):
     def result(self) -> Any:
         raise NotImplementedError
 
+@define
+class ScreenHandler(BaseHandler):
+    metadata: ScreenStateExpression
+    context: dict[str, Any]
+
+    def result(self, event_name: str = None) -> bool:
+        """Проверяет, совпадает ли переданное событие с событием в metadata"""
+        if event_name is None:
+            return False
+        return self.metadata.event_name == event_name
 
 @define
 class TechnicalHandler(BaseHandler):

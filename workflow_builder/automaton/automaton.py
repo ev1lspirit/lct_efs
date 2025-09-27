@@ -51,7 +51,16 @@ class Automaton:
         return candidates
 
     def _get_transition_candidates_based_on_event(self, event_name: str):
-        pass
+        logger.info(f"Processing event '{event_name}' for screen state...")
+        candidates = []
+        for handler in self.current_state.executables:
+            logger.info(f"Checking handler for event {handler.metadata.event_name}")
+            if handler.result(event_name):
+                executable_transition = handler.metadata.transition_bind_object
+                candidates.append(executable_transition)
+                logger.info(f"Found matching event handler, transition to: {executable_transition.state_id}")
+
+        return candidates
 
     def run(self):
         logger.info(f"Beginning pipeline with current state: {self.current_state.type_}")
@@ -59,8 +68,15 @@ class Automaton:
             if self.current_state._final:
                 logger.info("Pipeline finished")
                 break
+
             if self.current_state.type_ == StateTypeEnum.screen:
-                event_name = yield
+                # Отправляем экран на фронт
+                screen_data = self.current_state.send_to_front()
+                logger.info(f"Sending screen to front: {screen_data.get('name', 'unknown')}")
+
+                # Ждем событие от фронта
+                event_name = yield screen_data
+                logger.info(f"Received event from front: {event_name}")
                 candidates = self._get_transition_candidates_based_on_event(event_name)
             else:
                 candidates = self._get_transition_candidates_based_on_expressions()
@@ -79,7 +95,7 @@ class Automaton:
                     raise ValueError(
                         f"Next state {next_state_name} not found. Check if it was created."
                     )
-            self.current_state = next_state_object
+                self.current_state = next_state_object
 
     @classmethod
     def from_workflow_description(cls, workflow_description: BaseModel):
