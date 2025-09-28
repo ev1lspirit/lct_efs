@@ -11,7 +11,7 @@ StateModel = TypeVar("StateModel")
 
 
 class StateTypeEnum(StrEnum):
-    """ Типы состояний в рамках FSM"""
+    """ Типы состояний в рамках FSM """
     screen = "SCREEN"
     technical = "TECHNICAL"
     integration = "INTEGRATION"

@@ -7,8 +7,10 @@ from workflow_builder.expressions import (
     IntegrationStateExpression,
     TechnicalAndExpression,
     TechnicalOrExpression,
-    TechnicalStateExpression, ScreenStateExpression,
+    TechnicalStateExpression,
+    ScreenStateExpression
 )
+from simpleeval import simple_eval
 
 
 HandlerClass = TypeVar("HandlerClass")
@@ -67,13 +69,15 @@ class TechnicalHandler(BaseHandler):
     def result(self):
         if isinstance(self.metadata, TechnicalAndExpression):
             return all(
-                eval(expr, locals=self.context) for expr in self.metadata.expression
+                simple_eval(expr, names=self.context)
+                for expr in self.metadata.expression
             )
         if isinstance(self.metadata, TechnicalOrExpression):
             return any(
-                eval(expr, locals=self.context) for expr in self.metadata.expression
+                simple_eval(expr, names=self.context)
+                for expr in self.metadata.expression
             )
-        return eval(self.metadata.expression, locals=self.context)
+        return simple_eval(self.metadata.expression, names=self.context)
 
 
 @define(slots=True)

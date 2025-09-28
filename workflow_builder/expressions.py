@@ -1,8 +1,12 @@
 from functools import wraps
-from attr import define, field
+from attr import define, field, validators
 from functools import partial
 from typing import Any, Callable
 from workflow_builder.transitions import Transition
+import logging
+
+
+logger = logging.getLogger(__name__)
 
 
 # def typeassert(function: Callable = None, types: list[type] = []):
@@ -36,42 +40,24 @@ class BaseStateExpression:
         bind_transition (str): bind transition to expression
         execute (SessionContext, **kwargs): execute expression (must be overridden by subclasses)
     """
-    _transition_bind: str = field(
-        default=None, init=False
-    )  # state id to bind after execution
     _transition_bind_object: Any = field(default=None, init=False)
 
     @property
     def transition_bind_object(self) -> Transition:
         return self._transition_bind_object
 
-    @property
-    def transition_bind(self) -> str:
-        return self._transition_bind
-
-    @transition_bind.setter
-    def transition_bind(self, value: str):
-        if self._transition_bind is not None:
-            raise ValueError("Transition already bound")
-        if value is None:
-            raise ValueError("Transition bind cannot be None")
-        self._transition_bind = value
-
     @transition_bind_object.setter
     def transition_bind_object(self, transition: Transition):
-        if not isinstance(transition, Transition):
-            raise ValueError(f"Expected Transition, got {type(transition).__name__}")
-        if transition.state_id != self.transition_bind:
-            raise ValueError(
-                f"Transition destination {transition.state_id} does not match bind id {self.transition_bind}"
-            )
+        if transition is not None:
+            if not isinstance(transition, list):
+                raise ValueError(f"Expected list[Transition], got {type(transition).__name__}")
         self._transition_bind_object = transition
 
-    def bind_transition(self, name: str):
-        if self.transition_bind is not None:
-            raise ValueError("Transition already bound")
-        self._transition_bind = name
-        return self
+    # def bind_transition(self, name: str):
+    #     if self.transition_bind is not None:
+    #         raise ValueError("Transition already bound")
+    #     self._transition_bind = name
+    #     return self
 
 
 class LogicalExpressionMixin:
@@ -172,9 +158,13 @@ class TechnicalStateExpression(LogicalExpressionMixin, BaseStateExpression):
     Notes:
         TechnicalStateExpression is a subclass of BaseStateExpression
     """
-    # variable: str  # variable to be updated
-    dependent_variables: list[str]  # a list of dependent variables
-    expression: str = field()  # python execution lambda
+    variable: str = field(
+        validator=validators.instance_of(str)
+    )  # variable to be updated
+    dependent_variables: list[str] = field(
+        validator=validators.instance_of(list)
+    )  # a list of dependent variables
+    expression: str = field(validator=validators.instance_of(str))  # python execution lambda
 
 @define(slots=True)
 class ScreenStateExpression(BaseStateExpression):
@@ -196,7 +186,7 @@ class ScreenStateExpression(BaseStateExpression):
         >>> expr.event_name
         'submit'
     """
-    event_name: str = field()
+    event_name: str = field(validator=validators.instance_of(str))
 
 @define(slots=True)
 class IntegrationStateExpression(BaseStateExpression):
@@ -228,10 +218,15 @@ class IntegrationStateExpression(BaseStateExpression):
     Notes:
         IntegrationStateExpression is a subclass of BaseStateExpression
     """
-    variable: str = field()
-    url: str = field()  # endpoint URL
-    params: dict[str, Any] = field(default={})  # query or body params
-    method: str = field(default="get")  # GET, POST, etc.
+    variable: str = field(validator=validators.instance_of(str))
+    url: str = field(validator=validators.instance_of(str))  # endpoint URL
+    params: dict[str, Any] = field(
+        factory=dict, validator=validators.instance_of(dict)
+    )  # query or body params
+    method: str = field(
+        default="get",
+        validator=validators.in_(["get", "post", "put", "delete", "patch"]),
+    )  # HTTP method
 
 
 class Expression:
@@ -239,9 +234,10 @@ class Expression:
 
     @classmethod
     def technical(
-        cls, *, dependent_variables: list[str], expression: str
+        cls, *, variable: str, dependent_variables: list[str], expression: str
     ) -> "TechnicalStateExpression":
         return TechnicalStateExpression(
+            variable=variable,
             dependent_variables=dependent_variables, expression=expression
         )
 
@@ -254,7 +250,7 @@ class Expression:
         )
 
     @classmethod
-    def event(
+    def screen(
         cls, *, event_name: str
     ):
         return ScreenStateExpression(event_name=event_name)
