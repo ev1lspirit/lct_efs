@@ -34,6 +34,7 @@ class StateModel(BaseModel):
     initial_state: bool = False
     events: list[EventModel] = []
     final_state: bool = False
+    screen_data: Optional[dict] = None  # JSON данные экрана для screen состояний
 
 
 STATE_CLASSES = {

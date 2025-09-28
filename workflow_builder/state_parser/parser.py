@@ -10,7 +10,6 @@ from .workflow_cache import workflow_cache
 from .contract import STATE_CLASSES, StateModel
 from workflow_builder.transitions import Transition
 
-
 if TYPE_CHECKING:
     from workflow_builder.states import WorkflowState
 
@@ -113,8 +112,27 @@ class GlobalStateParser:
             initial_state=state.initial_state,
             final=state.final_state,
         )
+
         if state.state_type != StateTypeEnum.screen:
             expressions = self._parse_expressions(state, expression_class)
             return partialled_cls(expressions=expressions)
+
+        # Для screen состояний сохраняем экран в MongoDB
         events = self._parse_events(state, expression_class)
-        return partialled_cls(events=events)
+        if hasattr(state, 'screen_data') and state.screen_data:
+            try:
+                from storage.mongo.screen_service import get_screen_service
+                screen_service = get_screen_service()
+                saved_id = screen_service.save_screen(state.name, state.screen_data)
+                if saved_id:
+                    logger.info(f"Screen '{state.name}' saved to MongoDB with ID: {saved_id}")
+                else:
+                    logger.warning(f"Failed to save screen '{state.name}' to MongoDB")
+            except ImportError as e:
+                logger.error(f"Failed to import screen_service: {e}")
+            except Exception as e:
+                logger.error(f"Error saving screen '{state.name}': {e}")
+        else:
+            logger.warning(f"Screen state '{state.name}' has no screen_data to save")
+
+        return partialled_cls(expressions=events)

@@ -1,14 +1,11 @@
 from __future__ import annotations
 from functools import cached_property
 import logging
-from abc import ABC
-from typing import ClassVar
+from abc import ABC, abstractmethod
+from typing import ClassVar, Optional, Dict, Any
 import uuid
-import json
 from workflow_builder.transitions import Transition
 from .models import StateTypeEnum, state_mapping
-# from database.redis.service import RedisCache
-
 
 logger = logging.getLogger(__name__)
 
@@ -37,15 +34,7 @@ class WorkflowState(ABC):
         self._bind_transitions()
 
     @cached_property
-    def transition_map(self): #-> dict[str, list[Transition]]:
-        # default_transitions = defaultdict(list)
-        # if self.type_ == StateTypeEnum.screen:
-        #     attr = "case"
-        # else:
-        #     attr = "variable"
-        # for t in self.transitions:
-        #     default_transitions[getattr(t, attr)].append(t)
-        # return default_transitions
+    def transition_map(self):
         return self.transitions
 
     def _create_exec_handlers(self, **kwargs):
@@ -66,6 +55,11 @@ class WorkflowState(ABC):
                 t for t in self.transitions if {getattr(expr, binding_expression_key)} & getattr(t, binding_key)
             ]
 
+    @abstractmethod
+    def send_to_front(self) -> Optional[Dict[str, Any]]:
+        """Отправляет данные состояния на фронт. Только ScreenState возвращает данные экрана."""
+        pass
+
     def __repr__(self):
         return f"<{self.__class__.__name__} uid={self.uid} type={self.type_}>"
 
@@ -73,9 +67,17 @@ class WorkflowState(ABC):
 class TechnicalState(WorkflowState):
     type_ = StateTypeEnum.technical
 
+    def send_to_front(self) -> Optional[Dict[str, Any]]:
+        """Техническое состояние не отправляет данные на фронт"""
+        return None
+
 
 class IntegrationState(WorkflowState):
     type_ = StateTypeEnum.integration
+
+    def send_to_front(self) -> Optional[Dict[str, Any]]:
+        """Интеграционное состояние не отправляет данные на фронт"""
+        return None
 
 
 class ScreenState(WorkflowState):
@@ -90,12 +92,22 @@ class ScreenState(WorkflowState):
         initial_state: bool = False,
     ):
         super().__init__(name=name, final=final, transitions=transitions, expressions=expressions, initial_state=initial_state)
-    def send_to_front(self) -> dict:
-        """Получает экран из Redis по имени этого состояния и возвращает JSON для фронта"""
-        redis_cache = {}
-        screen_key = redis_cache.get_screen_key(self.name)
-        screen_data = redis_cache.r.get(screen_key)
 
-        if not screen_data:
-            raise ValueError(f"Screen '{self.name}' not found in Redis")
-        return json.loads(screen_data)
+    def send_to_front(self) -> Dict[str, Any]:
+        """Получает экран из MongoDB и отправляет JSON на фронт как есть"""
+        try:
+            from storage.mongo.screen_service import get_screen_service
+            screen_service = get_screen_service()
+            screen_data = screen_service.get_screen(self.name)
+
+            if not screen_data:
+                raise ValueError(f"Screen '{self.name}' not found in MongoDB")
+
+            return screen_data
+
+        except ImportError as e:
+            logger.error(f"Failed to import screen_service: {e}")
+            raise ValueError(f"Screen service not available: {e}")
+        except Exception as e:
+            logger.error(f"Error loading screen '{self.name}': {e}")
+            raise ValueError(f"Failed to load screen '{self.name}': {e}")

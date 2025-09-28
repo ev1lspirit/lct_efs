@@ -66,9 +66,13 @@ class Automaton:
                 break
 
             if self.current_state.type_ == StateTypeEnum.screen:
-                # Отправляем экран на фронт
-                # screen_data = self.current_state.send_to_front()
-                # logger.info(f"Sending screen to front: {screen_data.get('name', 'unknown')}")
+                # Теперь все состояния имеют метод send_to_front
+                screen_data = self.current_state.send_to_front()
+                if screen_data:
+                    logger.info(f"Sending screen to front: {screen_data.get('name', 'unknown')}")
+                else:
+                    logger.info(f"No screen data to send for state: {self.current_state.name}")
+
                 expression_results = [
                     exp.result(event_name) for exp in self.current_state.executables
                 ]
