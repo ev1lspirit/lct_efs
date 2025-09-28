@@ -1,7 +1,6 @@
 from .base import BaseHandlersCreator
-from ..handlers import TechnicalHandler
+from ..handlers import ScreenHandler
 
 
-class WorkflowTechnicalHandlersCreator(BaseHandlersCreator[TechnicalHandler]):
+class WorkflowScreenHandlersCreator(BaseHandlersCreator[ScreenHandler]):
     """ Создатель обработчиков технических состояний """
-

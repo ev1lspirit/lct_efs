@@ -1,36 +1,103 @@
+import logging
 from operator import attrgetter
 from typing import TYPE_CHECKING, Optional
-
 from pydantic import BaseModel
+
+from workflow_builder.models import StateTypeEnum
+from workflow_builder.transitions import Transition
 
 if TYPE_CHECKING:
     from ..states import WorkflowState
+
+logger = logging.getLogger(__name__)
 
 class Automaton:
 
     def __init__(self, states: list['WorkflowState']):
         self.states = states
-        self.current_state: Optional['WorkflowState'] = None
+        self.state_mapping = {
+            state.name: state for state in self.states
+        }
+        self._current_state: 'WorkflowState' = self._resolve_initial_state() # type: ignore
 
-    def __iter__(self):
-        self.current_state = next(filter(attrgetter("initial_state"), self.states))
-        return self
+    @property
+    def current_state(self):
+        return self._current_state
 
-    def __next__(self):
-        current_state: WorkflowState = self.current_state
-        if current_state is None:
-            print("No current state")
-            return None
+    @current_state.setter
+    def current_state(self, state: 'WorkflowState'):
+        if state is None:
+            raise ValueError("No initial state found")
+        self._current_state = state
 
-        for expr in current_state.executables:
-            result = expr.result()
-            executable_transition = expr.metadata.transition_bind_object
-            executable_case = eval(executable_transition.case)
-            print(f"Evaluating expression for transition '{executable_case}': {result}")
-            if result == executable_case:
-                print(f"Found matched transition: {executable_transition}")
+    def _resolve_initial_state(self) -> Optional['WorkflowState']:
+        return next(
+            iter(
+                filter(attrgetter('initial_state'), self.states)
+            ), None
+        )
+
+    def _get_transition_candidates_based_on_expressions(self, expressions_and_results) -> Optional[Transition]:
+        logger.info("Proceeding to next state based on expressions...")
+        context = {}
+        for expr, result in expressions_and_results:
+            executable_transitions = expr.metadata.transition_bind_object
+            context[expr.metadata.variable] = result
+            for transition in executable_transitions:
+                if transition.matches(context):
+                    return transition
+
+    def _get_transition_candidates_based_on_event(
+        self, expressions_and_results, event_name: str
+    ):
+        logger.info(f"Processing event '{event_name}' for screen state...")
+        for handler, result in expressions_and_results:
+            logger.info(f"Checking handler for event {handler.metadata.event_name}")
+            if result:
+                executable_transition = handler.metadata.transition_bind_object
+                logger.info(f"Found matching event handler, transition to: {executable_transition.state_id}")
                 return executable_transition
-        raise ValueError("No matching transition found")
+
+    def run(self, event_name: str = None):
+        logger.info(f"Beginning pipeline with current state: {self.current_state.type_}")
+        while True:
+            if self.current_state._final:
+                logger.info("Pipeline finished")
+                break
+
+            if self.current_state.type_ == StateTypeEnum.screen:
+                # Теперь все состояния имеют метод send_to_front
+                screen_data = self.current_state.send_to_front()
+                if screen_data:
+                    logger.info(f"Sending screen to front: {screen_data.get('name', 'unknown')}")
+                else:
+                    logger.info(f"No screen data to send for state: {self.current_state.name}")
+
+                expression_results = [
+                    exp.result(event_name) for exp in self.current_state.executables
+                ]
+                candidate = self._get_transition_candidates_based_on_event(
+                    zip(self.current_state.executables, expression_results), event_name=event_name
+                )
+            else:
+                expression_results = [
+                    str(exp.result()) for exp in self.current_state.executables
+                ]
+                candidate = self._get_transition_candidates_based_on_expressions(zip(
+                    self.current_state.executables, expression_results))
+
+            if candidate is None:
+                logger.error(f"No matching transition found: state: {self.current_state.type_}, {self.current_state.name}")
+                raise ValueError("No matching transition found")
+
+            next_state_name = candidate.state_id
+            next_state_object = self.state_mapping.get(next_state_name)
+            if next_state_object is None:
+                logger.error(f"Next state {next_state_name} not found. Check if it was created.")
+                raise ValueError(
+                    f"Next state {next_state_name} not found. Check if it was created."
+                )
+            self.current_state = next_state_object
 
     @classmethod
     def from_workflow_description(cls, workflow_description: BaseModel):

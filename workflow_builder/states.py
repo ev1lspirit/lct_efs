@@ -1,41 +1,41 @@
 from __future__ import annotations
-
-from context import SessionContext
-from .automaton.automaton import Automaton
-
-context = SessionContext({"z": 1, "y": 7, "l": 4, "balance": 100, "x": 100})
-from abc import ABC
-from typing import ClassVar
+from functools import cached_property
+import logging
+from abc import ABC, abstractmethod
+from typing import ClassVar, Optional, Dict, Any
 import uuid
-from .expressions import Expression
 from workflow_builder.transitions import Transition
 from .models import StateTypeEnum, state_mapping
 
+logger = logging.getLogger(__name__)
 
 class WorkflowState(ABC):
     """Базовое состояние"""
 
     type_: ClassVar[StateTypeEnum]
-    context: ClassVar[SessionContext] = SessionContext()
+    context: ClassVar = {}
 
     def __init__(
         self,
-        context_variable: str,
+        name: str,
         transitions: list[Transition],
         expressions: list,
         initial_state: bool = False,
+        final: bool = False,
     ):
         self.uid = uuid.uuid4()
+        self.name = name
         self.initial_state = initial_state
-        self.context_variable = context_variable
+        self._final = final
         self.state_local_context = {}
         self.expressions: list = expressions
         self.transitions = transitions
         self.executables = self._create_exec_handlers()
+        self._bind_transitions()
 
-    @property
-    def transition_map(self) -> dict[str, Transition]:
-        return {t.state_id: t for t in self.transitions}
+    @cached_property
+    def transition_map(self):
+        return self.transitions
 
     def _create_exec_handlers(self, **kwargs):
         creator = self._resolve_exec_creator()
@@ -47,13 +47,18 @@ class WorkflowState(ABC):
             return lambda: {}
         return handlers_creator(workflow_state=self, handlers=self.expressions)
 
-    def _bind_transtions_and_expressions(self):
-        bind_map = self.transition_map
+    def _bind_transitions(self):
+        binding_key = "keys" if self.type_ == StateTypeEnum.screen else "variables"
+        binding_expression_key = "event_name" if self.type_ == StateTypeEnum.screen else "variable"
         for expr in self.expressions:
-            transition = bind_map.get(expr.transition_bind)
-            if transition is None:
-                raise ValueError(f"Transition with id={expr.transition_bind} not found")
-            expr.transition_bind_object = transition
+            expr.transition_bind_object = [
+                t for t in self.transitions if {getattr(expr, binding_expression_key)} & getattr(t, binding_key)
+            ]
+
+    @abstractmethod
+    def send_to_front(self) -> Optional[Dict[str, Any]]:
+        """Отправляет данные состояния на фронт. Только ScreenState возвращает данные экрана."""
+        pass
 
     def __repr__(self):
         return f"<{self.__class__.__name__} uid={self.uid} type={self.type_}>"
@@ -62,65 +67,47 @@ class WorkflowState(ABC):
 class TechnicalState(WorkflowState):
     type_ = StateTypeEnum.technical
 
-    def __init__(
-        self,
-        context_variable: str,
-        transitions: list[Transition],
-        expressions: list,
-        initial_state: bool = False,
-    ):
-        super().__init__(context_variable, transitions, expressions, initial_state)
-        self._bind_transtions_and_expressions()
+    def send_to_front(self) -> Optional[Dict[str, Any]]:
+        """Техническое состояние не отправляет данные на фронт"""
+        return None
 
 
 class IntegrationState(WorkflowState):
     type_ = StateTypeEnum.integration
 
-    def __init__(
-        self,
-        context_variable: str,
-        transitions: list[Transition],
-        expressions: list,
-        initial_state: bool = False,
-    ):
-        super().__init__(context_variable, transitions, expressions, initial_state)
-        self._bind_transtions_and_expressions()
+    def send_to_front(self) -> Optional[Dict[str, Any]]:
+        """Интеграционное состояние не отправляет данные на фронт"""
+        return None
 
 
 class ScreenState(WorkflowState):
     type_ = StateTypeEnum.screen
 
+    def __init__(
+        self,
+        name: str,
+        final: bool,
+        transitions: list[Transition],
+        expressions: list,
+        initial_state: bool = False,
+    ):
+        super().__init__(name=name, final=final, transitions=transitions, expressions=expressions, initial_state=initial_state)
 
-if __name__ == "__main__":
-    obj = TechnicalState(
-        initial_state=True,
-        context_variable="x",
-        transitions=[
-            Transition(case="True", state_id="next_id"),
-            Transition(case="False", state_id="prev_id"),
-        ],
-        expressions=[
-            (
-                Expression.technical(
-                    dependent_variables=["balance"], expression="balance>0"
-                )
-                & Expression.technical(dependent_variables=["x"], expression="x>0")
-            ).bind_transition(name="next_id")
-        ],
-    )
-    # integration = IntegrationState(
-    #     context_variable="z",
-    #     transitions=[
-    #         Transition(case="True", state_id="next_id")
-    #     ],
-    #     expressions=[
-    #         Expression.integration(
-    #             variable="z",
-    #             url="http://example.com",
-    #             params={"param": "value"},
-    #         ).bind_transition(name="next_id")
-    #     ]
-    # )
-    automaton = Automaton(states=[obj])
-    for state in automaton:
-        print(state)
+    def send_to_front(self) -> Dict[str, Any]:
+        """Получает экран из MongoDB и отправляет JSON на фронт как есть"""
+        try:
+            from storage.mongo.screen_service import get_screen_service
+            screen_service = get_screen_service()
+            screen_data = screen_service.get_screen(self.name)
+
+            if not screen_data:
+                raise ValueError(f"Screen '{self.name}' not found in MongoDB")
+
+            return screen_data
+
+        except ImportError as e:
+            logger.error(f"Failed to import screen_service: {e}")
+            raise ValueError(f"Screen service not available: {e}")
+        except Exception as e:
+            logger.error(f"Error loading screen '{self.name}': {e}")
+            raise ValueError(f"Failed to load screen '{self.name}': {e}")
