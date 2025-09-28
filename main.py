@@ -1,6 +1,6 @@
 import logging
 from context import SessionContext
-context = SessionContext({"z": 1, "y": 7, "l": 4, "balance": 100, "x": -1, "records": {'type': 'B'}})
+context = SessionContext({"z": 1, "y": 7, "l": 4, "balance": 100, "x": -1, "records": {'type': 'C'}})
 from workflow_builder.state_parser.parser import GlobalStateParser
 from utils import setup_logging
 from workflow_builder.automaton.automaton import Automaton

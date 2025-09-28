@@ -39,12 +39,12 @@ class Automaton:
 
     def _get_transition_candidates_based_on_expressions(self, expressions_and_results) -> Optional[Transition]:
         logger.info("Proceeding to next state based on expressions...")
+        context = {}
         for expr, result in expressions_and_results:
             executable_transitions = expr.metadata.transition_bind_object
+            context[expr.metadata.variable] = result
             for transition in executable_transitions:
-                executable_case = transition.case
-                logger.info(f"Case: {executable_case}, Result: {result}")
-                if result == executable_case:
+                if transition.matches(context):
                     return transition
 
     def _get_transition_candidates_based_on_event(
@@ -94,7 +94,6 @@ class Automaton:
                     f"Next state {next_state_name} not found. Check if it was created."
                 )
             self.current_state = next_state_object
-            
 
     @classmethod
     def from_workflow_description(cls, workflow_description: BaseModel):

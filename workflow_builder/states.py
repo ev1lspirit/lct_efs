@@ -39,15 +39,16 @@ class WorkflowState(ABC):
         self._bind_transitions()
 
     @cached_property
-    def transition_map(self) -> dict[str, list[Transition]]:
-        default_transitions = defaultdict(list)
-        if self.type_ == StateTypeEnum.screen:
-            attr = "case"
-        else:
-            attr = "variable"
-        for t in self.transitions:
-            default_transitions[getattr(t, attr)].append(t)
-        return default_transitions
+    def transition_map(self): #-> dict[str, list[Transition]]:
+        # default_transitions = defaultdict(list)
+        # if self.type_ == StateTypeEnum.screen:
+        #     attr = "case"
+        # else:
+        #     attr = "variable"
+        # for t in self.transitions:
+        #     default_transitions[getattr(t, attr)].append(t)
+        # return default_transitions
+        return self.transitions
 
     def _create_exec_handlers(self, **kwargs):
         creator = self._resolve_exec_creator()
@@ -60,11 +61,12 @@ class WorkflowState(ABC):
         return handlers_creator(workflow_state=self, handlers=self.expressions)
 
     def _bind_transitions(self):
-        binding_key = "event_name" if self.type_ == StateTypeEnum.screen else "variable"
-        bind_map = self.transition_map
+        binding_key = "keys" if self.type_ == StateTypeEnum.screen else "variables"
+        binding_expression_key = "event_name" if self.type_ == StateTypeEnum.screen else "variable"
         for expr in self.expressions:
-            transitions = bind_map.get(getattr(expr, binding_key), [])
-            expr.transition_bind_object = transitions
+            expr.transition_bind_object = [
+                t for t in self.transitions if {getattr(expr, binding_expression_key)} & getattr(t, binding_key)
+            ]
 
     def __repr__(self):
         return f"<{self.__class__.__name__} uid={self.uid} type={self.type_}>"

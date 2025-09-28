@@ -1,5 +1,6 @@
 from collections import deque
-from functools import partial
+from functools import partial, reduce
+import operator
 
 from workflow_builder.expressions import BaseStateExpression, Expression
 from typing import TYPE_CHECKING, Dict, Any
@@ -71,7 +72,6 @@ class GlobalStateParser:
             entities=expressions, expression_class=expression_class
         )
 
-    # todo: вынести логику в бейс
     def _parse_events(self, state: StateModel, expression_class):
         events = getattr(state, "events", [])
         return self._parse_entities(entities=events, expression_class=expression_class)
@@ -80,14 +80,13 @@ class GlobalStateParser:
         transitions = []
         for t in state.transitions:
             if isinstance(t.variable, list):
-                for v in t.variable:
-                    transitions.append(
-                        Transition(variable=v, case=t.case, state_id=t.state_id)
-                    )
+                trabsition_models = [Transition(
+                    variable=var, case=t.case, state_id=t.state_id
+                ) for var in t.variable]
+                transition = reduce(operator.and_, trabsition_models)
             else:
-                transitions.append(
-                    Transition(variable=t.variable, case=t.case, state_id=t.state_id)
-                )
+                transition = Transition(variable=t.variable, case=t.case, state_id=t.state_id)
+            transitions.append(transition)
         return transitions
 
     def build_state(self, state: StateModel) -> 'WorkflowState':

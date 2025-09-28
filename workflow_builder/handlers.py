@@ -2,16 +2,15 @@ from abc import ABC, abstractmethod
 from functools import wraps
 import inspect
 from attr import define
-from typing import Any, Callable, Optional, TypeVar
-from workflow_builder.expressions import (
-    IntegrationStateExpression,
-    TechnicalAndExpression,
-    TechnicalOrExpression,
-    TechnicalStateExpression,
-    ScreenStateExpression
-)
+from typing import TYPE_CHECKING, Any, Callable, Optional, TypeVar
 from simpleeval import simple_eval
 
+if TYPE_CHECKING:
+    from workflow_builder.expressions import (
+        IntegrationStateExpression,
+        TechnicalStateExpression,
+        ScreenStateExpression,
+    )
 
 HandlerClass = TypeVar("HandlerClass")
 
@@ -51,7 +50,7 @@ class BaseHandler(ABC):
 
 @define(slots=True)
 class ScreenHandler(BaseHandler):
-    metadata: ScreenStateExpression
+    metadata: 'ScreenStateExpression'
     context: dict[str, Any]
 
     def result(self, event_name: Optional[str] = None) -> bool:
@@ -62,28 +61,28 @@ class ScreenHandler(BaseHandler):
 
 @define(slots=True)
 class TechnicalHandler(BaseHandler):
-    metadata: TechnicalStateExpression
+    metadata: 'TechnicalStateExpression'
     context: dict[str, Any]
 
     @check_context_consistency
     def result(self):
-        if isinstance(self.metadata, TechnicalAndExpression):
-            return all(
-                simple_eval(expr, names=self.context)
-                for expr in self.metadata.expression
-            )
-        if isinstance(self.metadata, TechnicalOrExpression):
-            return any(
-                simple_eval(expr, names=self.context)
-                for expr in self.metadata.expression
-            )
+        # if isinstance(self.metadata, TechnicalAndExpression):
+        #     return all(
+        #         simple_eval(expr, names=self.context)
+        #         for expr in self.metadata.expression
+        #     )
+        # if isinstance(self.metadata, TechnicalOrExpression):
+        #     return any(
+        #         simple_eval(expr, names=self.context)
+        #         for expr in self.metadata.expression
+        #     )
         return simple_eval(self.metadata.expression, names=self.context)
 
 
 @define(slots=True)
 class IntegrationHandler(BaseHandler):
     adapter: Any  # CommonAdapter  # type: ignore[name-defined]
-    metadata: IntegrationStateExpression
+    metadata: 'IntegrationStateExpression'
     context: dict[str, Any]
 
     @check_context_consistency

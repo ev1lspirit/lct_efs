@@ -1,7 +1,7 @@
 from functools import wraps
 from attr import define, field, validators
-from functools import partial
-from typing import Any, Callable
+from typing import Any, ClassVar
+from workflow_builder.models import StateTypeEnum
 from workflow_builder.transitions import Transition
 import logging
 
@@ -41,6 +41,7 @@ class BaseStateExpression:
         execute (SessionContext, **kwargs): execute expression (must be overridden by subclasses)
     """
     _transition_bind_object: Any = field(default=None, init=False)
+    type_: ClassVar[StateTypeEnum]
 
     @property
     def transition_bind_object(self) -> Transition:
@@ -165,6 +166,7 @@ class TechnicalStateExpression(LogicalExpressionMixin, BaseStateExpression):
         validator=validators.instance_of(list)
     )  # a list of dependent variables
     expression: str = field(validator=validators.instance_of(str))  # python execution lambda
+    type_: ClassVar[StateTypeEnum] = StateTypeEnum.technical
 
 @define(slots=True)
 class ScreenStateExpression(BaseStateExpression):
@@ -187,6 +189,8 @@ class ScreenStateExpression(BaseStateExpression):
         'submit'
     """
     event_name: str = field(validator=validators.instance_of(str))
+    type_: ClassVar[StateTypeEnum] = StateTypeEnum.screen
+
 
 @define(slots=True)
 class IntegrationStateExpression(BaseStateExpression):
@@ -227,6 +231,7 @@ class IntegrationStateExpression(BaseStateExpression):
         default="get",
         validator=validators.in_(["get", "post", "put", "delete", "patch"]),
     )  # HTTP method
+    type_: ClassVar[StateTypeEnum] = StateTypeEnum.integration
 
 
 class Expression:

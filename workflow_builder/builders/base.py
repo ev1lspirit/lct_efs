@@ -1,5 +1,4 @@
 from context import SessionContext
-from ..expressions import IntegrationStateExpression, TechnicalStateExpression
 from ..handlers import (
     HandlerClass,
 )
@@ -9,6 +8,7 @@ from typing import TYPE_CHECKING, ClassVar, Generic, Union, get_args
 
 if TYPE_CHECKING:
     from ..states import WorkflowState
+    from ..expressions import IntegrationStateExpression, TechnicalStateExpression
 
 
 @define
@@ -16,7 +16,7 @@ class BaseHandlersCreator(Generic[HandlerClass], ABC):
     """Базовый создатель обработчиков состояний"""
 
     workflow_state: "WorkflowState" = field()
-    handlers: list[Union[TechnicalStateExpression, IntegrationStateExpression]] = (
+    handlers: list[Union['TechnicalStateExpression', 'IntegrationStateExpression']] = (
         field()
     )
     context: ClassVar[SessionContext] = SessionContext()
