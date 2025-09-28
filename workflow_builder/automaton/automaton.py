@@ -94,6 +94,7 @@ class Automaton:
                     f"Next state {next_state_name} not found. Check if it was created."
                 )
             self.current_state = next_state_object
+            
 
     @classmethod
     def from_workflow_description(cls, workflow_description: BaseModel):

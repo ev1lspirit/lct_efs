@@ -76,6 +76,7 @@ class LogicalExpressionMixin:
     Subclasses should override the execute method to provide their own implementation
 
     """
+    __slots__ = ["dependent_variables"]
 
     def __process_dependent_vars(self, value):
         dependent_vars = []
