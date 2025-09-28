@@ -65,7 +65,7 @@ class Automaton:
                 logger.info("Pipeline finished")
                 break
 
-            if event_name:
+            if self.current_state.type_ == StateTypeEnum.screen:
                 # Отправляем экран на фронт
                 # screen_data = self.current_state.send_to_front()
                 # logger.info(f"Sending screen to front: {screen_data.get('name', 'unknown')}")

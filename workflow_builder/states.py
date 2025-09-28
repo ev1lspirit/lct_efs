@@ -1,8 +1,6 @@
 from __future__ import annotations
-from collections import defaultdict
 from functools import cached_property
 import logging
-from context import SessionContext
 from abc import ABC
 from typing import ClassVar
 import uuid
@@ -18,7 +16,7 @@ class WorkflowState(ABC):
     """Базовое состояние"""
 
     type_: ClassVar[StateTypeEnum]
-    context: ClassVar[SessionContext] = {}
+    context: ClassVar = {}
 
     def __init__(
         self,

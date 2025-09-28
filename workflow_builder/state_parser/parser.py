@@ -6,6 +6,7 @@ from workflow_builder.expressions import BaseStateExpression, Expression
 from typing import TYPE_CHECKING, Dict, Any
 import logging
 from workflow_builder.models import StateTypeEnum
+from .workflow_cache import workflow_cache
 from .contract import STATE_CLASSES, StateModel
 from workflow_builder.transitions import Transition
 
@@ -22,9 +23,12 @@ class GlobalStateParser:
     Класс для парсинга входных данных с админ-панели
     """
 
-    def __init__(self, current_state_name: str, data: Dict[str, Any]):
-        self.data = data
+    def __init__(self, current_state_name: str, workflow_id: str):
+        self.data = []
+        self.workflow_id = workflow_id
         self.current_state_name = current_state_name
+        if self.data is None:
+            self.data = self._load_workflow()
 
     def get_automaton_subgraph(self):
         state_mapping = {state.name: state for state in self.parse_states()}
@@ -54,9 +58,14 @@ class GlobalStateParser:
         return states_to_include
 
     def parse_states(self):
-        for raw_state in self.data.get("states", []):
-            state = StateModel(**raw_state)  # валидация
+        for state in self.data:
             yield self.build_state(state)
+
+    def _load_workflow(self) -> dict:
+        states: list[StateModel] = workflow_cache.get_workflow(self.workflow_id)
+        if not states:
+            raise ValueError(f"Workflow {self.workflow_id} not found")
+        return states
 
     def _parse_entities(self, *, entities, expression_class):
         items = []
@@ -109,10 +118,3 @@ class GlobalStateParser:
             return partialled_cls(expressions=expressions)
         events = self._parse_events(state, expression_class)
         return partialled_cls(events=events)
-
-
-"""
-Проверка работоспособности
-"""
-if __name__ == "__main__":
-    pass
