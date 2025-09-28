@@ -40,47 +40,24 @@ class BaseStateExpression:
         bind_transition (str): bind transition to expression
         execute (SessionContext, **kwargs): execute expression (must be overridden by subclasses)
     """
-    _transition_bind: str = field(
-        default=None, init=False
-    )  # state id to bind after execution
     _transition_bind_object: Any = field(default=None, init=False)
 
     @property
     def transition_bind_object(self) -> Transition:
         return self._transition_bind_object
 
-    @property
-    def transition_bind(self) -> str:
-        return self._transition_bind
-
-    @transition_bind.setter
-    def transition_bind(self, value: str):
-        if self._transition_bind is not None:
-            raise ValueError("Transition already bound")
-        if value is None:
-            raise ValueError("Transition bind cannot be None")
-        self._transition_bind = value
-
     @transition_bind_object.setter
     def transition_bind_object(self, transition: Transition):
         if transition is not None:
-            if not isinstance(transition, Transition):
-                raise ValueError(f"Expected Transition, got {type(transition).__name__}")
-            if transition.state_id != self.transition_bind:
-                raise ValueError(
-                    f"Transition destination {transition.state_id} does not match bind id {self.transition_bind}"
-                )
-        else:
-            if self.transition_bind is not None:
-                logger.warning(f"Transition object is None while bind exists. Class: {self.__class__.__name__}")
-                raise ValueError("Transition object is None while bind exists. Please provide a valid Transition object")
+            if not isinstance(transition, list):
+                raise ValueError(f"Expected list[Transition], got {type(transition).__name__}")
         self._transition_bind_object = transition
 
-    def bind_transition(self, name: str):
-        if self.transition_bind is not None:
-            raise ValueError("Transition already bound")
-        self._transition_bind = name
-        return self
+    # def bind_transition(self, name: str):
+    #     if self.transition_bind is not None:
+    #         raise ValueError("Transition already bound")
+    #     self._transition_bind = name
+    #     return self
 
 
 class LogicalExpressionMixin:

@@ -57,34 +57,45 @@ class GlobalStateParser:
             state = StateModel(**raw_state)  # валидация
             yield self.build_state(state)
 
-    def _parse_expressions(self, state: StateModel, expression_class) -> list[BaseStateExpression]:
-        expressions = []
-        for expression in state.expressions:
+    def _parse_entities(self, *, entities, expression_class):
+        items = []
+        for expression in entities:
             expression_dump = expression.model_dump()
-            transition_bind = expression_dump.pop("transition_bind", None)
             expression_model = expression_class(**expression_dump)
-            if transition_bind is not None:
-                expression_model = expression_model.bind_transition(name=transition_bind)
-                expressions.append(expression_model)
-        return expressions
+            items.append(expression_model)
+        return items
+
+    def _parse_expressions(self, state: StateModel, expression_class) -> list[BaseStateExpression]:
+        expressions = getattr(state, "expressions", [])
+        return self._parse_entities(
+            entities=expressions, expression_class=expression_class
+        )
 
     # todo: вынести логику в бейс
     def _parse_events(self, state: StateModel, expression_class):
-        events = []
-        for event in state.events:
-            event_dump = event.model_dump()
-            transition_bind = event_dump.pop("transition_bind", None)
-            event_model = expression_class(**event_dump)
-            if transition_bind is not None:
-                event_model = event_model.bind_transition(name=transition_bind)
-                events.append(event_model)
-        return events
+        events = getattr(state, "events", [])
+        return self._parse_entities(entities=events, expression_class=expression_class)
+
+    def _parse_transitions(self, state: StateModel):
+        transitions = []
+        for t in state.transitions:
+            if isinstance(t.variable, list):
+                for v in t.variable:
+                    transitions.append(
+                        Transition(variable=v, case=t.case, state_id=t.state_id)
+                    )
+            else:
+                transitions.append(
+                    Transition(variable=t.variable, case=t.case, state_id=t.state_id)
+                )
+        return transitions
 
     def build_state(self, state: StateModel) -> 'WorkflowState':
         cls = STATE_CLASSES.get(state.state_type)
         if not cls:
             raise ValueError(f"Unsupported state_type: {state.state_type}")
-        transitions = [Transition(case=t.case, state_id=t.state_id) for t in state.transitions]
+
+        transitions: list[Transition] = self._parse_transitions(state)
         expression_class = getattr(Expression, state.state_type)
 
         partialled_cls = partial(
@@ -105,93 +116,4 @@ class GlobalStateParser:
 Проверка работоспособности
 """
 if __name__ == "__main__":
-    test_json  = {
-        "states": [
-            {
-                "state_type": "technical",
-                "name": "Init",
-                "transitions": [
-                    {"case": "success", "state_id": "LoadData"},
-                    {"case": "error", "state_id": "ErrorState"},
-                ],
-                "expressions": [
-                    {
-                        "transition_bind": "LoadData",
-                        "variable": "data_loaded",
-                        "dependent_variables": [],
-                        "expression": "lambda: True",
-                    }
-                ],
-                "initial_state": True,
-                "final_state": False,
-            },
-            {
-                "state_type": "integration",
-                "name": "LoadData",
-                "transitions": [
-                    {"case": "loaded", "state_id": "ProcessData"},
-                    {"case": "missing", "state_id": "ErrorState"},
-                ],
-                "expressions": [
-                    {
-                        "transition_bind": "ProcessData",
-                        "variable": "records",
-                        "url": "https://api.example.com/data",
-                        "params": {"limit": 100},
-                        "method": "get",
-                    }
-                ],
-                "initial_state": False,
-                "final_state": False,
-            },
-            {
-                "state_type": "technical",
-                "name": "ProcessData",
-                "transitions": [
-                    {"case": "processed", "state_id": "ShowScreen"},
-                    {"case": "fail", "state_id": "ErrorState"},
-                ],
-                "expressions": [
-                    {
-                        "transition_bind": "ShowScreen",
-                        "variable": "processed",
-                        "dependent_variables": ["records"],
-                        "expression": "lambda records: records > 0",
-                    }
-                ],
-                "initial_state": False,
-                "final_state": False,
-            },
-            {
-                "state_type": "screen",
-                "name": "ShowScreen",
-                "transitions": [{"case": "continue", "state_id": "Final"}],
-                "expressions": [
-                    {
-                        "transition_bind": "Final",
-                        "event_name": "render_ui",
-                    }
-                ],
-                "initial_state": False,
-                "final_state": False,
-            },
-            {
-                "state_type": "technical",
-                "name": "Final",
-                "transitions": [],
-                "expressions": [],
-                "initial_state": False,
-                "final_state": True,
-            },
-            {
-                "state_type": "technical",
-                "name": "ErrorState",
-                "transitions": [],
-                "initial_state": False,
-                "final_state": True,
-            },
-        ]
-    }
-
-    parser = GlobalStateParser(current_state_name="Init", data=test_json)
-    states = parser.get_automaton_subgraph()
+    pass

@@ -3,30 +3,26 @@ from typing import Any, Literal, Optional, Union
 from pydantic import BaseModel, HttpUrl
 from workflow_builder.states import IntegrationState, ScreenState, TechnicalState
 
-
-class BaseExpressionModel(BaseModel, ABC):
-    transition_bind: Optional[str] = None
-
-
 class TransitionModel(BaseModel):
     case: str
     state_id: str
+    variable: Optional[Union[str, list]] = None
 
 
-class TechnicalExpressionModel(BaseExpressionModel):
+class TechnicalExpressionModel(BaseModel):
     variable: str  # variable to be updated
     dependent_variables: list[str]  # a list of dependent variables
     expression: str  # python execution lambda
 
 
-class IntegrationExpressionModel(BaseExpressionModel):
+class IntegrationExpressionModel(BaseModel):
     variable: str
     url: HttpUrl
     params: dict[str, Any]
     method: Literal["get", "post", "put", "delete", "patch"]
 
 
-class EventModel(BaseExpressionModel):
+class EventModel(BaseModel):
     event_name: str
 
 
