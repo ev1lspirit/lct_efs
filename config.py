@@ -26,6 +26,7 @@ class Settings:
     REDIS_HOST = os.environ.get("REDIS_HOST", "localhost")
     REDIS_PORT = int(os.environ.get("REDIS_PORT", "6379"))
     REDIS_DB = int(os.environ.get("REDIS_DB", "0"))
+    REDIS_PASSWORD = quote_plus(os.environ.get("REDIS_PASSWORD", ""))
 
     MONGO_USER = os.environ.get("MONGO_USER")
     MONGO_PASSWORD = quote_plus(os.environ.get("MONGO_PASSWORD", ""))
@@ -42,7 +43,7 @@ class Settings:
 
     @property
     def redis_url(self):
-        return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
+        return f"redis://:{self.REDIS_PASSWORD}@{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
 
     @property
     def mongo_url(self) -> str:

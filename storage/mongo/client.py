@@ -1,4 +1,4 @@
-from urllib.parse import quote_plus
+from pprint import pprint
 from pymongo import MongoClient
 from bson.objectid import ObjectId
 from typing import Optional, Dict, Any
@@ -17,6 +17,18 @@ class MongoDBClient:
         self.db = self.client[database]
         self.collection = self.db[collection]
 
+    def get_all(self, filter: Optional[Dict[str, Any]] = None) -> list:
+        """
+        Get all items from a collection.
+
+        Args:
+            filter (Optional[Dict[str, Any]]): Filter to apply to collection.
+
+        Returns:
+            list: List of items.
+        """
+        return list(self.db[self.collection.name].find(filter))
+
     def retrieve_description(self, description_id: str) -> Optional[Dict[str, Any]]:
         """
         Получает JSON-описание по ID.
@@ -26,6 +38,7 @@ class MongoDBClient:
             Словарь с данными или None, если документ не найден
         """
         try:
+            pprint(self.get_all())
             document = self.collection.find_one({"_id": ObjectId(description_id)})
             if document:
                 # Преобразуем ObjectId в строку для JSON-сериализации
@@ -72,11 +85,12 @@ class MongoDBClient:
 
     def __del__(self):
         """Закрывает соединение с MongoDB при удалении объекта"""
-        self.client.close()
+        if self.client:
+            self.client.close()
 
 
 # Dependency для MongoDB клиента
-def get_mongo_client():
+def get_mongo_client_as_dependency():
     """
     Создает и возвращает MongoDBClient как зависимость.
     Автоматически закрывает соединение после использования.
@@ -86,6 +100,15 @@ def get_mongo_client():
         yield mongo_client
     finally:
         mongo_client.__del__()  # Явно вызываем метод закрытия соединения
+
+
+def get_mongo_client():
+    """
+    Создает и возвращает MongoDBClient как зависимость.
+    Автоматически закрывает соединение после использования.
+    """
+    mongo_client = MongoDBClient(database="lct_efs", collection="states")
+    return mongo_client
 
 
 # Пример использования:

@@ -1,10 +1,10 @@
 from abc import ABC
 from typing import Any, Literal, Optional, Union
-from pydantic import BaseModel, HttpUrl
+from pydantic import BaseModel
 from workflow_builder.states import IntegrationState, ScreenState, TechnicalState
 
 class TransitionModel(BaseModel):
-    case: str
+    case: Optional[str]
     state_id: str
     variable: Optional[Union[str, list]] = None
 
@@ -17,7 +17,7 @@ class TechnicalExpressionModel(BaseModel):
 
 class IntegrationExpressionModel(BaseModel):
     variable: str
-    url: HttpUrl
+    url: str
     params: dict[str, Any]
     method: Literal["get", "post", "put", "delete", "patch"]
 

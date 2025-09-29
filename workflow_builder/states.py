@@ -5,6 +5,7 @@ from abc import ABC
 from typing import ClassVar
 import uuid
 import json
+from context import SessionContext
 from workflow_builder.transitions import Transition
 from .models import StateTypeEnum, state_mapping
 # from database.redis.service import RedisCache
@@ -16,10 +17,10 @@ class WorkflowState(ABC):
     """Базовое состояние"""
 
     type_: ClassVar[StateTypeEnum]
-    context: ClassVar = {}
 
     def __init__(
         self,
+        context: SessionContext,
         name: str,
         transitions: list[Transition],
         expressions: list,
@@ -27,6 +28,7 @@ class WorkflowState(ABC):
         final: bool = False,
     ):
         self.uid = uuid.uuid4()
+        self.context = context
         self.name = name
         self.initial_state = initial_state
         self._final = final
@@ -38,14 +40,6 @@ class WorkflowState(ABC):
 
     @cached_property
     def transition_map(self): #-> dict[str, list[Transition]]:
-        # default_transitions = defaultdict(list)
-        # if self.type_ == StateTypeEnum.screen:
-        #     attr = "case"
-        # else:
-        #     attr = "variable"
-        # for t in self.transitions:
-        #     default_transitions[getattr(t, attr)].append(t)
-        # return default_transitions
         return self.transitions
 
     def _create_exec_handlers(self, **kwargs):
@@ -56,7 +50,7 @@ class WorkflowState(ABC):
         handlers_creator = state_mapping.get(self.type_)
         if handlers_creator is None:
             return lambda: {}
-        return handlers_creator(workflow_state=self, handlers=self.expressions)
+        return handlers_creator(context=self.context, workflow_state=self, handlers=self.expressions)
 
     def _bind_transitions(self):
         binding_key = "keys" if self.type_ == StateTypeEnum.screen else "variables"
@@ -65,6 +59,11 @@ class WorkflowState(ABC):
             expr.transition_bind_object = [
                 t for t in self.transitions if {getattr(expr, binding_expression_key)} & getattr(t, binding_key)
             ]
+            if self.type_ == StateTypeEnum.integration:
+                if len( expr.transition_bind_object) != 1:
+                    raise ValueError("Integration state can have only one transition")
+                if expr.transition_bind_object[0].case is not None:
+                    raise ValueError("Integration state can't have a transition condition")
 
     def __repr__(self):
         return f"<{self.__class__.__name__} uid={self.uid} type={self.type_}>"
@@ -81,15 +80,16 @@ class IntegrationState(WorkflowState):
 class ScreenState(WorkflowState):
     type_ = StateTypeEnum.screen
 
-    def __init__(
-        self,
-        name: str,
-        final: bool,
-        transitions: list[Transition],
-        expressions: list,
-        initial_state: bool = False,
-    ):
-        super().__init__(name=name, final=final, transitions=transitions, expressions=expressions, initial_state=initial_state)
+    # def __init__(
+    #     self,
+    #     name: str,
+    #     final: bool,
+    #     transitions: list[Transition],
+    #     expressions: list,
+    #     initial_state: bool = False,
+    # ):
+    #     super().__init__(name=name, final=final, transitions=transitions, expressions=expressions, initial_state=initial_state)
+
     def send_to_front(self) -> dict:
         """Получает экран из Redis по имени этого состояния и возвращает JSON для фронта"""
         redis_cache = {}

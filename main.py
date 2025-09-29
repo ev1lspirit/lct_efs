@@ -9,3 +9,8 @@ logger = logging.getLogger(__name__)
 
 if __name__ == "__main__":
     pass
+
+    parser = GlobalStateParser("Init", workflow_id="1234")
+    parser.get_automaton_subgraph()
+    automaton = Automaton.
+    automaton.run()

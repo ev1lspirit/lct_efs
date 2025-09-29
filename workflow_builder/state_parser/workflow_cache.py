@@ -1,6 +1,6 @@
 from typing import Dict, Optional
 from .contract import StateModel
-from storage.mongo.client import MongoDBClient
+from storage.mongo.client import get_mongo_client, get_mongo_client_as_dependency
 import logging
 
 logger = logging.getLogger(__name__)
@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 class WorkflowCache:
     def __init__(self):
         self._cache: Dict[str, list[StateModel]] = {}
-        self._mongo_client = MongoDBClient(database="mydb", collection="states")
+        self._mongo_client = get_mongo_client()
 
     def get_workflow(self, workflow_id: str) -> Optional[list[StateModel]]:
         """Get workflow from cache or load from MongoDB if not present"""

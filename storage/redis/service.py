@@ -6,8 +6,8 @@ from utils import GeneralPurposeSingletonMeta, execute_safe
 
 
 class RedisCache(metaclass=GeneralPurposeSingletonMeta):
-    def __init__(self, host: str = settings.REDIS_HOST):
-        self.r = redis.Redis(host=host, port=settings.REDIS_PORT, decode_responses=True)
+    def __init__(self):
+        self.r = redis.Redis.from_url(settings.redis_url)
 
     def create_session(self, data: dict) -> str:
         """

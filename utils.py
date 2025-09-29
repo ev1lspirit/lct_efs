@@ -1,6 +1,5 @@
 from functools import wraps
 from typing import Any, Optional, Type
-from workflow_builder.states import WorkflowState
 import logging
 
 
@@ -35,6 +34,9 @@ def setup_logging():
     logger.info("This is green INFO")
     logger.error("This is red ERROR")
 
+
+logger = logging.getLogger(__name__)
+
 def field_typechecker(type_: Type[Any]):
 
     def inner_handler(instance, attribute, value):
@@ -46,8 +48,8 @@ def field_typechecker(type_: Type[Any]):
     return inner_handler
 
 
-def state_typechecker():
-    return field_typechecker(type_=WorkflowState)
+# def state_typechecker():
+#     return field_typechecker(type_=WorkflowState)
 
 
 def execute_safe(default_return=None, service_name: Optional[str] = None):

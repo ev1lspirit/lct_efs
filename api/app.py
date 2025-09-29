@@ -2,6 +2,9 @@ import json
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
 from fastapi.testclient import TestClient
+
+from workflow_builder.automaton.automaton import Automaton
+from workflow_builder.state_parser.parser import GlobalStateParser
 from .routes import router
 import uvicorn
 
@@ -33,7 +36,7 @@ if __name__ == "__main__":
                         {
                             "variable": "data_loaded",
                             "case": "True",
-                            "state_id": "ProcessData",
+                            "state_id": "FetchData",
                         },
                         {
                             "variable": "data_loaded",
@@ -50,6 +53,23 @@ if __name__ == "__main__":
                     ],
                     "initial_state": True,
                     "final_state": False,
+                },
+                {
+                    "state_type": "integration",
+                    "name": "FetchData",
+                    "transitions": [
+                        {"variable": "data_fetched", "case": None, "state_id": "ProcessData"},
+                    ],
+                    "expressions": [
+                        {
+                            "variable": "data_fetched",
+                            "url": "http://localhost:8080",
+                            "params": {},
+                            "method": "get",
+                        }
+                    ],
+                    "initial_state": False,
+                    "final_state": False
                 },
                 {
                     "state_type": "technical",
@@ -132,7 +152,24 @@ if __name__ == "__main__":
                 },
             ]
         }
-        response = test_client.post("/workflow/save", json=test_json["states"])
+
+        automaton = Automaton(session_id="1234567890", workflow_id="68da5935428adff22feedeab")
+        automaton.run()
+
+        response = test_client.post("/workflow/save", json=test_json)
+        assert response.status_code == 200
+
+    def test_user_session():
+        client_session_id = "1234567890"
+        workflow_id = "68d976ced58d8162a65994f3"
+        response = test_client.post(
+            "/client/workflow",
+            json={
+                "client_session_id": client_session_id,
+                "client_workflow_id": workflow_id,
+            },
+        )
         assert response.status_code == 200
 
     test_workflow()
+    #test_user_session()

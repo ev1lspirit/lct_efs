@@ -3,10 +3,17 @@ services:
     image: redis/redis-stack
     container_name: redis
     ports:
-      - "6379:6379"
+      - "6379:6379"  # accessible only from host
     volumes:
       - redis_data:/data
-    command: ["redis-server", "--appendonly", "yes"] # включаем сохранение данных
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "RockyRock@1"]
+  nginx:
+    image: nginx:latest
+    container_name: nginx
+    ports:
+      - "8080:80"
 
   mongo:
     image: mongo:7.0

@@ -1,3 +1,4 @@
+from context import SessionContext
 from ..handlers import (
     HandlerClass,
 )
@@ -18,7 +19,7 @@ class BaseHandlersCreator(Generic[HandlerClass], ABC):
     handlers: list[Union['TechnicalStateExpression', 'IntegrationStateExpression']] = (
         field()
     )
-    context: ClassVar = {}
+    context: SessionContext = field()
 
     def __init_subclass__(cls, **kwargs) -> None:
         """Инициализирует аттрибут :attr:`model` значением из тип-параметра генерика"""

@@ -24,14 +24,14 @@ class GlobalStateParser:
     """
 
     def __init__(self, current_state_name: str, workflow_id: str):
-        self.data = []
+        self.data = None
         self.workflow_id = workflow_id
         self.current_state_name = current_state_name
         if self.data is None:
             self.data = self._load_workflow()
 
     def get_automaton_subgraph(self):
-        state_mapping = {state.name: state for state in self.parse_states()}
+        state_mapping = {state.name: state for state in self.data}
         current_state_mapping = state_mapping.get(self.current_state_name)
 
         if not current_state_mapping:
@@ -46,7 +46,7 @@ class GlobalStateParser:
             state_to_process = queue.popleft()
             states_to_include.append(state_to_process)
 
-            if state_to_process.type_ == StateTypeEnum.screen:
+            if state_to_process.state_type == StateTypeEnum.screen:
                 continue
 
             for transition in state_to_process.transitions:
@@ -54,14 +54,13 @@ class GlobalStateParser:
                 if next_state and next_state.name not in processed:
                     queue.append(next_state)
                     processed.add(next_state.name)
-
         return states_to_include
 
     def parse_states(self):
         for state in self.data:
             yield self.build_state(state)
 
-    def _load_workflow(self) -> dict:
+    def _load_workflow(self) -> list[StateModel]:
         states: list[StateModel] = workflow_cache.get_workflow(self.workflow_id)
         if not states:
             raise ValueError(f"Workflow {self.workflow_id} not found")
@@ -97,24 +96,3 @@ class GlobalStateParser:
                 transition = Transition(variable=t.variable, case=t.case, state_id=t.state_id)
             transitions.append(transition)
         return transitions
-
-    def build_state(self, state: StateModel) -> 'WorkflowState':
-        cls = STATE_CLASSES.get(state.state_type)
-        if not cls:
-            raise ValueError(f"Unsupported state_type: {state.state_type}")
-
-        transitions: list[Transition] = self._parse_transitions(state)
-        expression_class = getattr(Expression, state.state_type)
-
-        partialled_cls = partial(
-            cls,
-            name=state.name,
-            transitions=transitions,
-            initial_state=state.initial_state,
-            final=state.final_state,
-        )
-        if state.state_type != StateTypeEnum.screen:
-            expressions = self._parse_expressions(state, expression_class)
-            return partialled_cls(expressions=expressions)
-        events = self._parse_events(state, expression_class)
-        return partialled_cls(events=events)

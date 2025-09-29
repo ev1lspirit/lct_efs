@@ -1,10 +1,8 @@
 from typing import Type
 from ..builders.base import BaseHandlersCreator
 from ..handlers import IntegrationHandler
-# from adapters.commonAdapter import CommonAdapter
+from adapters.commonAdapter import CommonAdapter
 
-class CommonAdapter:
-    pass
 
 class WorkflowIntegrationHandlersCreator(BaseHandlersCreator[IntegrationHandler]):
     """ Создатель обработчиков интеграционных состояний """
@@ -20,4 +18,4 @@ class WorkflowIntegrationHandlersCreator(BaseHandlersCreator[IntegrationHandler]
         Returns:
             The result of calling the parent class's __call__ method.
         """
-        return super().__call__(adapter=self.adapter(), **kwargs)
+        return super().__call__(adapter=self.adapter, **kwargs)
