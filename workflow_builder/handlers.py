@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from functools import wraps
 import inspect
 from urllib.parse import urlparse
+from venv import logger
 from attr import define
 from typing import TYPE_CHECKING, Any, Callable, Optional, TypeVar
 from simpleeval import simple_eval
@@ -13,6 +14,7 @@ if TYPE_CHECKING:
         IntegrationStateExpression,
         TechnicalStateExpression,
         ScreenStateExpression,
+        ServiceStateExpression,
     )
 
 HandlerClass = TypeVar("HandlerClass")
@@ -30,13 +32,17 @@ def check_context_consistency(function: Callable):
                 f"Expected {BaseHandler.__name__}, got {type(self).__name__}"
             )
         if hasattr(self.metadata, "dependent_variables"):
-            if not all(var in self.context.session for var in self.metadata.dependent_variables):
+            if not all(
+                var in self.context.session for var in self.metadata.dependent_variables
+            ):
                 missing_vars = [
                     var
                     for var in self.metadata.dependent_variables
                     if var not in self.context.session
                 ]
-                raise ValueError(f"Missing dependent variables in context: {missing_vars}")
+                raise ValueError(
+                    f"Missing dependent variables in context: {missing_vars}"
+                )
         return function(self, *args, **kwargs)
 
     return wrapper
@@ -45,7 +51,7 @@ def check_context_consistency(function: Callable):
 class BaseHandler(ABC):
     __slots__ = ("metadata", "context")
     metadata: Any
-    context: 'SessionContext'
+    context: "SessionContext"
 
     @abstractmethod
     def result(self) -> Any:
@@ -54,8 +60,8 @@ class BaseHandler(ABC):
 
 @define(slots=True)
 class ScreenHandler(BaseHandler):
-    metadata: 'ScreenStateExpression'
-    context: 'SessionContext'
+    metadata: "ScreenStateExpression"
+    context: "SessionContext"
 
     def result(self, event_name: Optional[str] = None) -> bool:
         """Проверяет, совпадает ли переданное событие с событием в metadata"""
@@ -63,10 +69,11 @@ class ScreenHandler(BaseHandler):
             return False
         return self.metadata.event_name == event_name
 
+
 @define(slots=True)
 class TechnicalHandler(BaseHandler):
-    metadata: 'TechnicalStateExpression'
-    context: 'SessionContext'
+    metadata: "TechnicalStateExpression"
+    context: "SessionContext"
 
     @check_context_consistency
     def result(self):
@@ -84,10 +91,32 @@ class TechnicalHandler(BaseHandler):
 
 
 @define(slots=True)
+class DependencyHandler(BaseHandler):
+    metadata: "ServiceStateExpression"
+    context: "SessionContext"
+
+    def result(self):
+        workflow_context = self.metadata.mongo_client.get(self.context._workflow_id)
+        if not isinstance(workflow_context, dict):
+            logger.error(f"Workflow context {self.context._workflow_id} not found")
+            raise ValueError(f"Workflow context for {self.context._workflow_id} not found")
+
+        self.metadata.redis_client.set_workflow_context(
+            session_id=self.context._session_id, context=workflow_context
+        )
+        if workflow_context:
+            logger.warning("Workflow context is not get.")
+            workflow_context = {}
+        with self.context as context:
+            context.update(workflow_context)
+        return workflow_context
+
+
+@define(slots=True)
 class IntegrationHandler(BaseHandler):
     adapter: Any  # CommonAdapter  # type: ignore[name-defined]
-    metadata: 'IntegrationStateExpression'
-    context: 'SessionContext'
+    metadata: "IntegrationStateExpression"
+    context: "SessionContext"
 
     def _split_url(self):
         parsed = urlparse(self.metadata.url)
@@ -102,7 +131,7 @@ class IntegrationHandler(BaseHandler):
         return method_attr
 
     @check_context_consistency
-    def result(self): # type: ignore
+    def result(self):  # type: ignore
         base_url, endpoint = self._split_url()
         adapter = self.adapter(base_url=base_url)
         method_attr = self._get_method(adapter)

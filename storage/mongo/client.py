@@ -7,15 +7,20 @@ from config import settings
 
 class MongoDBClient:
     def __init__(self, database: str, collection: str):
-        # Формируем строку подключения
-        if settings.MONGO_USER and settings.MONGO_PASSWORD:
-            uri = f"mongodb://{settings.MONGO_USER}:{settings.MONGO_PASSWORD}@{settings.MONGO_HOST}:{settings.MONGO_PORT}/{settings.MONGO_AUTH_DB}"
-        else:
-            uri = f"mongodb://{settings.MONGO_HOST}:{settings.MONGO_PORT}"
-
-        self.client = MongoClient(uri)
+        self.client = MongoClient(settings.mongo_url)
         self.db = self.client[database]
         self.collection = self.db[collection]
+
+    def get(self, id: str) -> Optional[Dict[str, Any]]:
+        try:
+            document = self.collection.find_one({"_id": ObjectId(id)})
+            if document:
+                # Преобразуем ObjectId в строку для JSON-сериализации
+                document["_id"] = str(document["_id"])
+            return document
+        except Exception as e:
+            print(f"Error retrieving document: {e}")
+            return None
 
     def get_all(self, filter: Optional[Dict[str, Any]] = None) -> list:
         """
@@ -95,7 +100,7 @@ def get_mongo_client_as_dependency():
     Создает и возвращает MongoDBClient как зависимость.
     Автоматически закрывает соединение после использования.
     """
-    mongo_client = MongoDBClient(database="lct_efs", collection="states")
+    mongo_client = MongoDBClient(database=settings.MONGO_DB, collection="states")
     try:
         yield mongo_client
     finally:

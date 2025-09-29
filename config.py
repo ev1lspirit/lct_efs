@@ -33,6 +33,7 @@ class Settings:
     MONGO_HOST = os.environ.get("MONGO_HOST", "localhost")
     MONGO_PORT = int(os.environ.get("MONGO_PORT", "27017"))
     MONGO_AUTH_DB = os.environ.get("MONGO_AUTH_DB", "admin")
+    MONGO_DB = os.environ.get("MONGO_DB", "test")
 
     @property
     def database_url(self):

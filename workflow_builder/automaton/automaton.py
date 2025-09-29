@@ -2,7 +2,6 @@ from functools import partial
 import logging
 from operator import attrgetter
 from typing import TYPE_CHECKING, Optional
-from unittest import result
 from context import SessionContext
 from workflow_builder.automaton.models import StateMetadata
 from workflow_builder.expressions import Expression
@@ -23,7 +22,7 @@ class Automaton:
         self._workflow_id = workflow_id
 
         self.zero_state = "__service_Init"
-        self.session_context = SessionContext(session_id=session_id)
+        self.session_context = SessionContext(session_id=session_id, workflow_id=self._workflow_id)
         self.default_state = self._resolve_initial_state().name
         self.global_state_parser = GlobalStateParser(
             current_state_name=self.default_state, workflow_id=self._workflow_id
@@ -50,11 +49,16 @@ class Automaton:
             initial_state=state.initial_state,
             final=state.final_state,
         )
-        if state.state_type != StateTypeEnum.screen:
+        if state.state_type == StateTypeEnum.service:
+            expressions = [Expression.service(mongo_collection_name="workflow_context")]
+
+        elif state.state_type != StateTypeEnum.screen:
             expressions = self.global_state_parser._parse_expressions(state, expression_class)
-            return partialled_cls(expressions=expressions)
-        events = self.global_state_parser._parse_events(state, expression_class)
-        return partialled_cls(events=events)
+        else:
+            expressions = self.global_state_parser._parse_events(
+                state, expression_class
+            )
+        return partialled_cls(expressions=expressions)
 
     def _create_states(self):
         states = self.global_state_parser.get_automaton_subgraph()
@@ -124,6 +128,15 @@ class Automaton:
                         f"Failed to evaluate expression for variable {variable}: {str(e)}"
                     ) from e
 
+    def _evaluate_service_executables(self):
+        for expression in self.current_state.executables:
+            try:
+                expression.result()
+            except Exception as e:
+                raise RuntimeError(
+                    f"Failed to evaluate expression: {str(e)}"
+                )
+
     def run(self, event_name: str = None):
         logger.info(f"Beginning pipeline with current state: {self.current_state.type_}")
         while True:
@@ -131,7 +144,12 @@ class Automaton:
                 logger.info("Pipeline finished")
                 break
 
-            self._evaluate_executables(event_name)
+            evaluator = (
+                self._evaluate_service_executables
+                if self.current_state.type_ == StateTypeEnum.service
+                else partial(self._evaluate_executables, event_name)
+            )
+            evaluator()
 
             if self.current_state.type_ == StateTypeEnum.screen:
                 # подгрузить экран и отправить экран

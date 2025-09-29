@@ -1,9 +1,12 @@
 import json
+import logging
 import uuid
 import redis
 from config import settings
 from utils import GeneralPurposeSingletonMeta, execute_safe
 
+
+logger = logging.getLogger(__name__)
 
 class RedisCache(metaclass=GeneralPurposeSingletonMeta):
     def __init__(self):
@@ -12,6 +15,22 @@ class RedisCache(metaclass=GeneralPurposeSingletonMeta):
     def save_state(self, session_id: str, state_obj: dict):
         redis_key = self.get_session_state_key(session_id)
         self.r.hset(redis_key, mapping=state_obj)
+
+    def set_workflow_context(self, session_id: str, context: dict):
+        redis_key = f"workflow_context:{session_id}"
+        try:
+            self.r.hset(redis_key, mapping=context)
+        except Exception as exc:
+            logger.error("Error: ")
+            raise exc
+
+    def get_workflow_context(self, session_id: str):
+        redis_key = f"workflow_context:{session_id}"
+        try:
+            return self.r.hgetall(redis_key)
+        except Exception as exc:
+            logger.error("Error: ")
+            raise exc
 
     def get_state(self, session_id: str):
         redis_key = self.get_session_state_key(session_id)
@@ -37,11 +56,12 @@ class RedisCache(metaclass=GeneralPurposeSingletonMeta):
         :return: словарь с данными сессии или None, если сессия не существует
         """
         raw = self.r.hgetall(self.get_session_key(session_id))
-        return {k.decode(): v.decode() for k, v in raw.items()} if raw else None
+        return {k.decode(): v.decode() for k, v in raw.items()} if raw is not None else None
 
     def update_session(self, session_id: str, data: dict, ttl: int = 3600):
         key = self.get_session_key(session_id)
-        self.r.hset(key, mapping=data)
+        if data:
+            self.r.hset(key, mapping=data)
 
     def delete_session(self, session_id: str):
         self.r.delete(self.get_session_key(session_id))
