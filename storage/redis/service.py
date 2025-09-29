@@ -9,6 +9,14 @@ class RedisCache(metaclass=GeneralPurposeSingletonMeta):
     def __init__(self):
         self.r = redis.Redis.from_url(settings.redis_url)
 
+    def save_state(self, session_id: str, state_obj: dict):
+        redis_key = self.get_session_state_key(session_id)
+        self.r.hset(redis_key, mapping=state_obj)
+
+    def get_state(self, session_id: str):
+        redis_key = self.get_session_state_key(session_id)
+        return self.r.hgetall(redis_key)
+
     def create_session(self, data: dict) -> str:
         """
         Создает сессию в Redis и возвращает ее идентификатор.
@@ -45,6 +53,10 @@ class RedisCache(metaclass=GeneralPurposeSingletonMeta):
     @staticmethod
     def get_session_key(session_id: str):
         return f"session:{session_id}"
+
+    @staticmethod
+    def get_session_state_key(session_id: str):
+        return f"state:{session_id}"
 
     @execute_safe(default_return=False, service_name="Redis")
     def check_screen(self, screen_id: str):

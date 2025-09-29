@@ -1,10 +1,10 @@
 import json
+import os
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
 from fastapi.testclient import TestClient
 
 from workflow_builder.automaton.automaton import Automaton
-from workflow_builder.state_parser.parser import GlobalStateParser
 from .routes import router
 import uvicorn
 
@@ -22,4 +22,3 @@ async def healthcheck():
 
 if __name__ == "__main__":
     # uvicorn.run("app:app", host="127.0.0.1", port=8000, reload=True)
-    pass

@@ -2,10 +2,9 @@ from functools import partial
 import logging
 from operator import attrgetter
 from typing import TYPE_CHECKING, Optional
-from pydantic import BaseModel
-
+from unittest import result
 from context import SessionContext
-from storage.redis.service import get_redis_cache
+from workflow_builder.automaton.models import StateMetadata
 from workflow_builder.expressions import Expression
 from workflow_builder.models import StateTypeEnum
 from workflow_builder.state_parser.contract import STATE_CLASSES, StateModel
@@ -21,14 +20,19 @@ class Automaton:
 
     def __init__(self, *, session_id: str, workflow_id: str):
         self._session_id = session_id
-        self.session_context = SessionContext(session_id=session_id)
         self._workflow_id = workflow_id
-        self.global_state_parser = GlobalStateParser(current_state_name="Init", workflow_id=self._workflow_id)
+
+        self.zero_state = "__service_Init"
+        self.session_context = SessionContext(session_id=session_id)
+        self.default_state = self._resolve_initial_state().name
+        self.global_state_parser = GlobalStateParser(
+            current_state_name=self.default_state, workflow_id=self._workflow_id
+        )
         self.states = self._create_states()
         self.state_mapping = {
             state.name: state for state in self.states
         }
-        self._current_state: 'WorkflowState' = self._resolve_initial_state() # type: ignore
+        self._current_state = self.state_mapping.get(self.zero_state)
 
     def build_state(self, state: StateModel) -> "WorkflowState":
         cls = STATE_CLASSES.get(state.state_type)
@@ -53,10 +57,14 @@ class Automaton:
         return partialled_cls(events=events)
 
     def _create_states(self):
-        return [self.build_state(state) for state in self.global_state_parser.get_automaton_subgraph()]
+        states = self.global_state_parser.get_automaton_subgraph()
+        first_state = next(filter(attrgetter("initial_state"), states))
+        _zero_state_model = StateModel.zero_state(first_state.name)
+        _zero_state = self.build_state(_zero_state_model)
+        return [_zero_state] + [self.build_state(state) for state in states]
 
     @property
-    def current_state(self):
+    def current_state(self) -> "WorkflowState":
         return self._current_state
 
     @current_state.setter
@@ -65,39 +73,56 @@ class Automaton:
             raise ValueError("No initial state found")
         self._current_state = state
 
-    def _resolve_initial_state(self) -> Optional['WorkflowState']:
-        return next(
-            iter(
-                filter(attrgetter('initial_state'), self.states)
-            ), None
-        )
+    def _resolve_initial_state(self) -> StateMetadata:
+        return self.session_context.get_session_state()
 
-    def _get_transition_candidates_based_on_expressions(self, expressions_and_results) -> Optional[Transition]:
+    def _get_transition_candidates_based_on_expressions(self, current_state: 'WorkflowState') -> Optional[Transition]:
         logger.info("Proceeding to next state based on expressions...")
-        context = {}
-        for expr, result in expressions_and_results:
+        for expr in current_state.executables:
+            result = self.session_context.get(expr.metadata.variable)
             logger.debug(f"Processing expression: {expr}, result: {result}")
             executable_transitions = expr.metadata.transition_bind_object
-            context[expr.metadata.variable] = result
-            logger.debug(f"Updated context: {context}")
             for transition in executable_transitions:
                 logger.debug(f"Evaluating transition: {transition}")
-                if transition.case is None or transition.matches(context):
+                if transition.case is None or transition.matches(
+                    self.session_context.session
+                ):
                     logger.info(f"Transition matched: {transition}")
                     return transition
+
+        for transition in current_state.transitions:
+            if transition.case is None:
+                return transition
         logger.warning("No matching transition found based on expressions.")
         return None
 
     def _get_transition_candidates_based_on_event(
-        self, expressions_and_results, event_name: str
+        self, current_state: "WorkflowState", event_name: str
     ):
         logger.info(f"Processing event '{event_name}' for screen state...")
-        for handler, result in expressions_and_results:
-            logger.info(f"Checking handler for event {handler.metadata.event_name}")
+        for expr in current_state.executables:
+            result = self.session_context.get(expr.metadata.variable)
+            logger.info(f"Checking handler for event {expr.metadata.event_name}")
             if result:
-                executable_transition = handler.metadata.transition_bind_object
+                executable_transition = expr.metadata.transition_bind_object
                 logger.info(f"Found matching event handler, transition to: {executable_transition.state_id}")
                 return executable_transition
+
+    def _evaluate_executables(self, event_name: str = None):
+        with self.session_context as context:
+            for expression in self.current_state.executables:
+                variable = expression.metadata.variable
+                try:
+                    result = (
+                        expression.result(event_name)
+                        if self.current_state.type_ == StateTypeEnum.screen
+                        else str(expression.result())
+                    )
+                    context[variable] = result
+                except Exception as e:
+                    raise RuntimeError(
+                        f"Failed to evaluate expression for variable {variable}: {str(e)}"
+                    ) from e
 
     def run(self, event_name: str = None):
         logger.info(f"Beginning pipeline with current state: {self.current_state.type_}")
@@ -106,20 +131,21 @@ class Automaton:
                 logger.info("Pipeline finished")
                 break
 
-            expression_results = {
-                exp.metadata.variable: exp.result(event_name) if self.current_state.type_ == StateTypeEnum.screen
-                else str(exp.result())
-                for exp in self.current_state.executables
-            }
+            self._evaluate_executables(event_name)
 
             if self.current_state.type_ == StateTypeEnum.screen:
                 # подгрузить экран и отправить экран
+                current_state_data = StateMetadata(name=self.current_state.name, type_=self.current_state.type_)
+                self.session_context.update_session_state(current_state_data)
+                if event_name is None:
+                    return
                 candidate = self._get_transition_candidates_based_on_event(
-                    zip(self.current_state.executables, expression_results.values()), event_name=event_name
+                    current_state=self.current_state,
+                    event_name=event_name
                 )
             else:
                 candidate = self._get_transition_candidates_based_on_expressions(
-                    zip(self.current_state.executables, expression_results.values())
+                    current_state=self.current_state
                 )
 
             if candidate is None:
@@ -127,6 +153,7 @@ class Automaton:
                 raise ValueError("No matching transition found")
 
             next_state_name = candidate.state_id
+            logger.info(f"Setting next state: {next_state_name}")
             next_state_object = self.state_mapping.get(next_state_name)
             if next_state_object is None:
                 logger.error(f"Next state {next_state_name} not found. Check if it was created.")
