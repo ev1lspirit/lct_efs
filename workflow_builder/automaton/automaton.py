@@ -22,6 +22,7 @@ class Automaton:
         self._session_id = session_id
         self._workflow_id = workflow_id
 
+        self.zero_state = "__service_Init"
         self.session_context = SessionContext(session_id=session_id)
         self.default_state = self._resolve_initial_state().name
         self.global_state_parser = GlobalStateParser(
@@ -31,10 +32,7 @@ class Automaton:
         self.state_mapping = {
             state.name: state for state in self.states
         }
-        self._current_state = self.state_mapping.get(self.default_state)
-        if self._current_state is None:
-            logger.error(f"Initial state {self.default_state} not found")
-            raise ValueError(f"Initial state {self.default_state} not found")
+        self._current_state = self.state_mapping.get(self.zero_state)
 
     def build_state(self, state: StateModel) -> "WorkflowState":
         cls = STATE_CLASSES.get(state.state_type)
@@ -78,9 +76,9 @@ class Automaton:
     def _resolve_initial_state(self) -> StateMetadata:
         return self.session_context.get_session_state()
 
-    def _get_transition_candidates_based_on_expressions(self, expressions) -> Optional[Transition]:
+    def _get_transition_candidates_based_on_expressions(self, current_state: 'WorkflowState') -> Optional[Transition]:
         logger.info("Proceeding to next state based on expressions...")
-        for expr in expressions:
+        for expr in current_state.executables:
             result = self.session_context.get(expr.metadata.variable)
             logger.debug(f"Processing expression: {expr}, result: {result}")
             executable_transitions = expr.metadata.transition_bind_object
@@ -91,14 +89,18 @@ class Automaton:
                 ):
                     logger.info(f"Transition matched: {transition}")
                     return transition
+
+        for transition in current_state.transitions:
+            if transition.case is None:
+                return transition
         logger.warning("No matching transition found based on expressions.")
         return None
 
     def _get_transition_candidates_based_on_event(
-        self, expressions, event_name: str
+        self, current_state: "WorkflowState", event_name: str
     ):
         logger.info(f"Processing event '{event_name}' for screen state...")
-        for expr in expressions:
+        for expr in current_state.executables:
             result = self.session_context.get(expr.metadata.variable)
             logger.info(f"Checking handler for event {expr.metadata.event_name}")
             if result:
@@ -138,12 +140,12 @@ class Automaton:
                 if event_name is None:
                     return
                 candidate = self._get_transition_candidates_based_on_event(
-                    expressions=self.current_state.executables,
+                    current_state=self.current_state,
                     event_name=event_name
                 )
             else:
                 candidate = self._get_transition_candidates_based_on_expressions(
-                    expressions=self.current_state.executables
+                    current_state=self.current_state
                 )
 
             if candidate is None:
