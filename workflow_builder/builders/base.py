@@ -1,4 +1,3 @@
-from context import SessionContext
 from ..handlers import (
     HandlerClass,
 )
@@ -7,6 +6,7 @@ from abc import ABC
 from typing import TYPE_CHECKING, ClassVar, Generic, Union, get_args
 
 if TYPE_CHECKING:
+    from context import SessionContext
     from ..states import WorkflowState
     from ..expressions import IntegrationStateExpression, TechnicalStateExpression
 
@@ -19,7 +19,7 @@ class BaseHandlersCreator(Generic[HandlerClass], ABC):
     handlers: list[Union['TechnicalStateExpression', 'IntegrationStateExpression']] = (
         field()
     )
-    context: SessionContext = field()
+    context: 'SessionContext' = field()
 
     def __init_subclass__(cls, **kwargs) -> None:
         """Инициализирует аттрибут :attr:`model` значением из тип-параметра генерика"""

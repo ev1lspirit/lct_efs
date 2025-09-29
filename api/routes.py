@@ -1,20 +1,13 @@
 from datetime import datetime
-from pprint import pprint
 from typing import Optional
 from venv import logger
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from storage.mongo.client import MongoDBClient, get_mongo_client_as_dependency
-
-from workflow_builder.state_parser.parser import GlobalStateParser
 from storage.redis.service import RedisCache, get_redis_cache
-from workflow_builder.state_parser.contract import StateModel
+from workflow_builder.state_parser.contract import StateSet
 
 router = APIRouter()
-
-
-class StateSet(BaseModel):
-    states: list[StateModel]
 
 
 class WorkflowRequest(BaseModel):

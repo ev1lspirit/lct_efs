@@ -6,10 +6,9 @@ from attr import define
 from typing import TYPE_CHECKING, Any, Callable, Optional, TypeVar
 from simpleeval import simple_eval
 
-from context import SessionContext
-from fsm import base
 
 if TYPE_CHECKING:
+    from context import SessionContext
     from workflow_builder.expressions import (
         IntegrationStateExpression,
         TechnicalStateExpression,
@@ -35,7 +34,7 @@ def check_context_consistency(function: Callable):
                 missing_vars = [
                     var
                     for var in self.metadata.dependent_variables
-                    if var not in self.context
+                    if var not in self.context.session
                 ]
                 raise ValueError(f"Missing dependent variables in context: {missing_vars}")
         return function(self, *args, **kwargs)
@@ -46,7 +45,7 @@ def check_context_consistency(function: Callable):
 class BaseHandler(ABC):
     __slots__ = ("metadata", "context")
     metadata: Any
-    context: SessionContext
+    context: 'SessionContext'
 
     @abstractmethod
     def result(self) -> Any:
@@ -56,7 +55,7 @@ class BaseHandler(ABC):
 @define(slots=True)
 class ScreenHandler(BaseHandler):
     metadata: 'ScreenStateExpression'
-    context: SessionContext
+    context: 'SessionContext'
 
     def result(self, event_name: Optional[str] = None) -> bool:
         """Проверяет, совпадает ли переданное событие с событием в metadata"""
@@ -67,7 +66,7 @@ class ScreenHandler(BaseHandler):
 @define(slots=True)
 class TechnicalHandler(BaseHandler):
     metadata: 'TechnicalStateExpression'
-    context: SessionContext
+    context: 'SessionContext'
 
     @check_context_consistency
     def result(self):
@@ -88,7 +87,7 @@ class TechnicalHandler(BaseHandler):
 class IntegrationHandler(BaseHandler):
     adapter: Any  # CommonAdapter  # type: ignore[name-defined]
     metadata: 'IntegrationStateExpression'
-    context: SessionContext
+    context: 'SessionContext'
 
     def _split_url(self):
         parsed = urlparse(self.metadata.url)

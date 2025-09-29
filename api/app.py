@@ -1,13 +1,11 @@
 import json
+import os
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
 from fastapi.testclient import TestClient
 
 from workflow_builder.automaton.automaton import Automaton
-from workflow_builder.state_parser.parser import GlobalStateParser
 from .routes import router
-import uvicorn
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -153,7 +151,20 @@ if __name__ == "__main__":
             ]
         }
 
+        import timeit
+        import psutil
+
+        start_time = timeit.default_timer()
+        process = psutil.Process(os.getpid())
+        start_memory = process.memory_info().rss / 1024
         automaton = Automaton(session_id="1234567890", workflow_id="68da5935428adff22feedeab")
+        end_memory = process.memory_info().rss / 1024
+        end_time = timeit.default_timer()
+        memory_usage = end_memory - start_memory
+
+        creation_time = end_time - start_time
+        print(f"Creation of Automaton took {creation_time:.2f} seconds")
+        print(f"Creation of Automaton used {memory_usage:.2f} KB of memory")
         automaton.run()
 
         response = test_client.post("/workflow/save", json=test_json)
@@ -172,4 +183,4 @@ if __name__ == "__main__":
         assert response.status_code == 200
 
     test_workflow()
-    #test_user_session()
+    # test_user_session()

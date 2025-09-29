@@ -1,7 +1,8 @@
 from abc import ABC
 from typing import Any, Literal, Optional, Union
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 from workflow_builder.states import IntegrationState, ScreenState, TechnicalState
+from pydantic import root_validator
 
 class TransitionModel(BaseModel):
     case: Optional[str]
@@ -34,6 +35,40 @@ class StateModel(BaseModel):
     initial_state: bool = False
     events: list[EventModel] = []
     final_state: bool = False
+
+    @classmethod
+    def zero_state(cls, next_state_name: str):
+        return cls(
+            state_type="technical",
+            name=f"__service_Init",
+            transitions=[
+                TransitionModel(case=None, state_id=next_state_name, variable=None)
+            ],
+            initial_state=True,
+            expressions=[],
+            events=[],
+            final_state=False,
+        )
+
+
+class StateSet(BaseModel):
+    states: list[StateModel]
+
+    @model_validator(mode='before')
+    def validate_states(cls, values):
+        states = values.get("states", [])
+        if not states:
+            return values
+
+        initial_states = [state for state in states if state.get("initial_state")]
+        final_states = [state for state in states if state.get("final_state")]
+
+        if len(initial_states) != 1:
+            raise ValueError("There must be exactly one state with 'initial_state' set to True.")
+        if not final_states:
+            raise ValueError("There must be at least one state with 'final_state' set to True.")
+
+        return values
 
 
 STATE_CLASSES = {
