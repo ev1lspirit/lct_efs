@@ -91,6 +91,14 @@ def prepare_context_response(context: dict):
         for k, v in context.items()
     }
 
+def dump_context(context: dict):
+    return {
+        k.decode(): (
+            json.dumps(v) if isinstance(v, (dict, list)) else v.decode()
+        )
+        for k, v in context.items()
+    }
+
 class GeneralPurposeSingletonMeta(type):
     __instances: dict = {}
 

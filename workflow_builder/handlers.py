@@ -8,6 +8,8 @@ from attr import define
 from typing import TYPE_CHECKING, Any, Callable, Optional, TypeVar
 from simpleeval import simple_eval
 
+from utils import dump_context
+
 
 if TYPE_CHECKING:
     from context import SessionContext
@@ -106,10 +108,7 @@ class DependencyHandler(BaseHandler):
                 logger.error(f"Workflow context {self.context._workflow_id} not found")
                 raise ValueError(f"Workflow context for {self.context._workflow_id} not found")
 
-            wf_context_json = {
-                k: json.dumps(v) if isinstance(v, (dict, list)) else v
-                for k, v in workflow_context.items()
-            }
+            wf_context_json = dump_context(workflow_context)
             self.metadata.redis_client.set_workflow_context(
                 session_id=self.context._workflow_id, context=wf_context_json
             )

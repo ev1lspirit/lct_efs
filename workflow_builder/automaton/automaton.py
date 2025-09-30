@@ -64,14 +64,11 @@ class Automaton:
                     mongo_collection_name=settings.WORKFLOW_MONGO_COLLECTION
                 )
             ]
-        elif state.state_type != StateTypeEnum.screen:
-            expressions = self.global_state_parser._parse_expressions(
-                state, expression_class
-            )
         else:
-            expressions = self.global_state_parser._parse_events(
-                state, expression_class
+            expressions = self.global_state_parser._parse_expressions(
+                    state, expression_class
             )
+
         return partialled_cls(expressions=expressions)
 
     def _create_states(self):
@@ -136,7 +133,7 @@ class Automaton:
     ):
         logger.info(f"Processing event '{event_name}' for screen state...")
         for expr in current_state.executables:
-            result = self.session_context.get(expr.metadata.variable)
+            result = expr.result(event_name)
             logger.info(f"Checking handler for event {expr.metadata.event_name}")
             if result:
                 executable_transition = expr.metadata.transition_bind_object
@@ -196,23 +193,22 @@ class Automaton:
                 logger.info("Pipeline finished")
                 break
 
-            # call_deadlock_protection(start_time)
-            evaluator = (
-                self._evaluate_service_executables
-                if self.current_state.type_ == StateTypeEnum.service
-                else partial(self._evaluate_executables, event_name)
-            )
-            evaluator()
             if self.current_state.type_ == StateTypeEnum.screen:
-                # подгрузить экран и отправить экран
-                self._call_state_checkpoint()
                 # returns screen data
                 if on_return:
+                    self._call_state_checkpoint()
                     return
                 candidate = self._get_transition_candidates_based_on_event(
                     current_state=self.current_state, event_name=event_name
                 )
             else:
+                # call_deadlock_protection(start_time)
+                evaluator = (
+                    self._evaluate_service_executables
+                    if self.current_state.type_ == StateTypeEnum.service
+                    else partial(self._evaluate_executables, event_name)
+                )
+                evaluator()
                 candidate = self._get_transition_candidates_based_on_expressions(
                     current_state=self.current_state
                 )
