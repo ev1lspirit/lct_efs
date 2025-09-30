@@ -117,8 +117,7 @@ class DependencyHandler(BaseHandler):
             workflow_context = self.metadata.redis_client.get_workflow_context(
                 session_id=self.context._workflow_id
             )
-
-        if workflow_context:
+        if not (workflow_context.keys() & self.context.session.keys()):
             with self.context as context:
                 context.update(workflow_context)
         return workflow_context
