@@ -95,7 +95,7 @@ class TechnicalHandler(BaseHandler):
         #         simple_eval(expr, names=self.context)
         #         for expr in self.metadata.expression
         #     )
-        return simple_eval(self.metadata.expression, names=self.context.session)
+        return simple_eval(self.metadata.expression, names=self.context.session, functions={"len": len, "sum": sum, "max": max, "min": min})
 
 
 @define(slots=True)
