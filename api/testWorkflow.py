@@ -1,11 +1,9 @@
-import json
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
 from fastapi.testclient import TestClient
 
 from workflow_builder.automaton.automaton import Automaton
 from .routes import router
-import testWorkflow
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -210,8 +208,8 @@ def test_workflow_1_simple_login():
                 "expressions": [
                     {
                         "variable": "profile_loaded",
-                        "url": "http://api.example.com/profile",
-                        "params": {"user_id": "{{user_id}}"},
+                        "url": "http://localhost:8080",
+                        "params": {},
                         "method": "get",
                     }
                 ],

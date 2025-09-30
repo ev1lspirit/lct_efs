@@ -36,7 +36,7 @@ class Automaton:
         self.states = self._create_states()
         self.state_mapping = {state.name: state for state in self.states}
         self._current_state = self.state_mapping.get(self.zero_state)
-        self._actual_current_state = self.state_mapping[self.initial_state_name]
+        self._actual_initial_state = self.state_mapping[self.initial_state_name]
 
     def build_state(self, state: StateModel) -> "WorkflowState":
         cls = STATE_CLASSES.get(state.state_type)
@@ -177,8 +177,10 @@ class Automaton:
 
     def _get_on_return_policy(self):
         on_return = True
-        if self._actual_current_state.type_ == StateTypeEnum.screen:
-            on_return = False
+        if self._actual_initial_state.type_ == StateTypeEnum.screen:
+            if self.initial_state_name != settings.SERVICE_INIT_STATE:
+                on_return = False
+
         return on_return
 
     def run(self, event_name: Optional[str]):
@@ -197,7 +199,8 @@ class Automaton:
                 if on_return:
                     # returns screen data
                     self._call_state_checkpoint()
-                    return 
+                    return
+                on_return = not on_return
                 candidate = self._get_transition_candidates_based_on_event(
                     current_state=self.current_state, event_name=event_name
                 )
