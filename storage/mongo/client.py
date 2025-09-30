@@ -1,7 +1,11 @@
+from functools import partial
 from pprint import pprint
 from pymongo import MongoClient
 from bson.objectid import ObjectId
 from typing import Optional, Dict, Any
+
+import pymongo
+import pymongo.errors
 from config import settings
 
 
@@ -84,6 +88,9 @@ class MongoDBClient:
         try:
             result = self.collection.insert_one(description_data)
             return str(result.inserted_id)
+        except pymongo.errors.DuplicateKeyError as e:
+            print(f"Duplicate key error: {e}")
+            return None
         except Exception as e:
             print(f"Error inserting document: {e}")
             return None
@@ -100,11 +107,12 @@ def get_mongo_client_as_dependency():
     Создает и возвращает MongoDBClient как зависимость.
     Автоматически закрывает соединение после использования.
     """
-    mongo_client = MongoDBClient(database=settings.MONGO_DB, collection="states")
-    try:
-        yield mongo_client
-    finally:
-        mongo_client.__del__()  # Явно вызываем метод закрытия соединения
+    mongo_client = partial(
+        MongoDBClient,
+        database=settings.MONGO_DB,
+    )
+    yield mongo_client
+
 
 
 def get_mongo_client():

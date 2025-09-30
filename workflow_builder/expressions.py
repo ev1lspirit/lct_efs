@@ -208,9 +208,6 @@ class ScreenStateExpression(BaseStateExpression):
     event_name: str = field(validator=validators.instance_of(str))
     type_: ClassVar[StateTypeEnum] = StateTypeEnum.screen
 
-    def bindable(self):
-        return False
-
 
 @define(slots=True)
 class ServiceStateExpression(BaseStateExpression):

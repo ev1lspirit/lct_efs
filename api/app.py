@@ -150,24 +150,24 @@ if __name__ == "__main__":
                 },
             ]
         }
+        # import timeit
+        # import psutil
 
-        import timeit
-        import psutil
+        # start_time = timeit.default_timer()
+        # process = psutil.Process(os.getpid())
+        # start_memory = process.memory_info().rss / 1024
+        # automaton = Automaton(session_id="12345678901", workflow_id="68da5935428adff22feedeab")
+        # end_memory = process.memory_info().rss / 1024
+        # end_time = timeit.default_timer()
+        # memory_usage = end_memory - start_memory
 
-        start_time = timeit.default_timer()
-        process = psutil.Process(os.getpid())
-        start_memory = process.memory_info().rss / 1024
-        automaton = Automaton(session_id="12345678901", workflow_id="68da5935428adff22feedeab")
-        end_memory = process.memory_info().rss / 1024
-        end_time = timeit.default_timer()
-        memory_usage = end_memory - start_memory
+        # creation_time = end_time - start_time
+        # print(f"Creation of Automaton took {creation_time:.2f} seconds")
+        # print(f"Creation of Automaton used {memory_usage:.2f} KB of memory")
+        # automaton.run()
 
-        creation_time = end_time - start_time
-        print(f"Creation of Automaton took {creation_time:.2f} seconds")
-        print(f"Creation of Automaton used {memory_usage:.2f} KB of memory")
-        automaton.run()
-
-        response = test_client.post("/workflow/save", json=test_json)
+        body = {"states": test_json, "predefined_context": {"records": {"type": "A"}}}
+        response = test_client.post("/workflow/save", json=body)
         assert response.status_code == 200
 
     def test_user_session():

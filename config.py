@@ -36,6 +36,8 @@ class Settings:
     MONGO_DB = os.environ.get("MONGO_DB", "test")
 
     SERVICE_INIT_STATE = "__service_Init"
+    WORKFLOW_MONGO_COLLECTION = "workflow_context"
+    STATES_MONGO_COLLECTION = "states"
 
     @property
     def database_url(self):

@@ -48,11 +48,10 @@ class Automaton:
             context=self.session_context,
             transitions=transitions,
             initial_state=state.initial_state,
-            final=state.final_state,
+            final=state.final_state
         )
         if state.state_type == StateTypeEnum.service:
-            expressions = [Expression.service(mongo_collection_name="workflow_context")]
-
+            expressions = [Expression.service(mongo_collection_name=settings.WORKFLOW_MONGO_COLLECTION)]
         elif state.state_type != StateTypeEnum.screen:
             expressions = self.global_state_parser._parse_expressions(state, expression_class)
         else:
