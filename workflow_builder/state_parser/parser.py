@@ -9,6 +9,7 @@ from workflow_builder.models import StateTypeEnum
 from .workflow_cache import workflow_cache
 from .contract import STATE_CLASSES, StateModel
 from workflow_builder.transitions import Transition
+from config import settings
 
 
 if TYPE_CHECKING:
@@ -24,20 +25,24 @@ class GlobalStateParser:
     """
 
     def __init__(self, current_state_name: str, workflow_id: str):
-        self.data = None
+        self.data = []
         self.workflow_id = workflow_id
         self.current_state_name = current_state_name
-        if self.data is None:
+        if not self.data:
             self.data = self._load_workflow()
 
     def get_automaton_subgraph(self):
         state_mapping = {state.name: state for state in self.data}
         current_state_mapping = state_mapping.get(self.current_state_name)
-
         if not current_state_mapping:
             logger.error(f"Current state {self.current_state_name} not found")
             raise ValueError(f"Current state {self.current_state_name} not found")
 
+        on_continue = True
+        if current_state_mapping.state_type == StateTypeEnum.screen:
+            on_continue = False
+
+        current_state_mapping = state_mapping.get(settings.SERVICE_INIT_STATE)
         queue = deque([current_state_mapping])
         states_to_include = []
         processed = set([current_state_mapping.name])
@@ -47,7 +52,9 @@ class GlobalStateParser:
             states_to_include.append(state_to_process)
 
             if state_to_process.state_type == StateTypeEnum.screen:
-                continue
+                if on_continue:
+                    on_continue = not on_continue
+                    continue
 
             for transition in state_to_process.transitions:
                 next_state = state_mapping.get(transition.state_id)

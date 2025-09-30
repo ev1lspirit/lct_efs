@@ -1,6 +1,6 @@
 from typing import Dict, Optional
 from .contract import StateModel
-from storage.mongo.client import get_mongo_client, get_mongo_client_as_dependency
+from storage.mongo.client import get_mongo_client
 import logging
 
 logger = logging.getLogger(__name__)

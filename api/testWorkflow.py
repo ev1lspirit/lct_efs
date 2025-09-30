@@ -4,9 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi.testclient import TestClient
 
 from workflow_builder.automaton.automaton import Automaton
-from workflow_builder.state_parser.parser import GlobalStateParser
 from .routes import router
-import uvicorn
 import testWorkflow
 
 @asynccontextmanager

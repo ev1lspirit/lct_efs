@@ -56,6 +56,9 @@ class WorkflowState(ABC):
         binding_key = "keys" if self.type_ == StateTypeEnum.screen else "variables"
         binding_expression_key = "event_name" if self.type_ == StateTypeEnum.screen else "variable"
         for expr in self.expressions:
+            if not expr.bindable():
+                continue
+
             expr.transition_bind_object = [
                 t for t in self.transitions if {getattr(expr, binding_expression_key)} & getattr(t, binding_key)
             ]
@@ -79,6 +82,11 @@ class IntegrationState(WorkflowState):
 
 class ScreenState(WorkflowState):
     type_ = StateTypeEnum.screen
+    
+
+
+class ServiceState(WorkflowState):
+    type_ = StateTypeEnum.service
 
     # def __init__(
     #     self,

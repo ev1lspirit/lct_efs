@@ -1,9 +1,13 @@
 from functools import wraps
 from attr import define, field, validators
 from typing import Any, ClassVar
+
+from storage.mongo.client import MongoDBClient
+from storage.redis.service import RedisCache
 from workflow_builder.models import StateTypeEnum
 from workflow_builder.transitions import Transition
 import logging
+from config import settings
 
 
 logger = logging.getLogger(__name__)
@@ -21,6 +25,7 @@ logger = logging.getLogger(__name__)
 #                 )
 #         return True
 #     return wrapper
+
 
 @define
 class BaseStateExpression:
@@ -40,6 +45,7 @@ class BaseStateExpression:
         bind_transition (str): bind transition to expression
         execute (SessionContext, **kwargs): execute expression (must be overridden by subclasses)
     """
+
     _transition_bind_object: Any = field(default=None, init=False)
     type_: ClassVar[StateTypeEnum]
 
@@ -51,8 +57,13 @@ class BaseStateExpression:
     def transition_bind_object(self, transition: Transition):
         if transition is not None:
             if not isinstance(transition, list):
-                raise ValueError(f"Expected list[Transition], got {type(transition).__name__}")
+                raise ValueError(
+                    f"Expected list[Transition], got {type(transition).__name__}"
+                )
         self._transition_bind_object = transition
+
+    def bindable(self):
+        return True
 
     # def bind_transition(self, name: str):
     #     if self.transition_bind is not None:
@@ -77,7 +88,8 @@ class LogicalExpressionMixin:
     Subclasses should override the execute method to provide their own implementation
 
     """
-    #__slots__ = ["dependent_variables"]
+
+    # __slots__ = ["dependent_variables"]
 
     def __process_dependent_vars(self, value):
         dependent_vars = []
@@ -159,14 +171,18 @@ class TechnicalStateExpression(LogicalExpressionMixin, BaseStateExpression):
     Notes:
         TechnicalStateExpression is a subclass of BaseStateExpression
     """
+
     variable: str = field(
         validator=validators.instance_of(str)
     )  # variable to be updated
     dependent_variables: list[str] = field(
         validator=validators.instance_of(list)
     )  # a list of dependent variables
-    expression: str = field(validator=validators.instance_of(str))  # python execution lambda
+    expression: str = field(
+        validator=validators.instance_of(str)
+    )  # python execution lambda
     type_: ClassVar[StateTypeEnum] = StateTypeEnum.technical
+
 
 @define(slots=True)
 class ScreenStateExpression(BaseStateExpression):
@@ -188,8 +204,19 @@ class ScreenStateExpression(BaseStateExpression):
         >>> expr.event_name
         'submit'
     """
+
     event_name: str = field(validator=validators.instance_of(str))
     type_: ClassVar[StateTypeEnum] = StateTypeEnum.screen
+
+
+@define(slots=True)
+class ServiceStateExpression(BaseStateExpression):
+    redis_client: RedisCache = field(validator=validators.instance_of(RedisCache))
+    mongo_client: MongoDBClient = field(validator=validators.instance_of(MongoDBClient))
+    type_: ClassVar[StateTypeEnum] = StateTypeEnum.service
+
+    def bindable(self):
+        return False
 
 
 @define(slots=True)
@@ -222,6 +249,7 @@ class IntegrationStateExpression(BaseStateExpression):
     Notes:
         IntegrationStateExpression is a subclass of BaseStateExpression
     """
+
     variable: str = field(validator=validators.instance_of(str))
     url: str = field(validator=validators.instance_of(str))  # endpoint URL
     params: dict[str, Any] = field(
@@ -243,7 +271,8 @@ class Expression:
     ) -> "TechnicalStateExpression":
         return TechnicalStateExpression(
             variable=variable,
-            dependent_variables=dependent_variables, expression=expression
+            dependent_variables=dependent_variables,
+            expression=expression,
         )
 
     @classmethod
@@ -255,10 +284,17 @@ class Expression:
         )
 
     @classmethod
-    def screen(
-        cls, *, event_name: str
-    ):
+    def screen(cls, *, event_name: str):
         return ScreenStateExpression(event_name=event_name)
+
+    @classmethod
+    def service(cls, mongo_collection_name):
+        return ServiceStateExpression(
+            redis_client=RedisCache(),
+            mongo_client=MongoDBClient(
+                database=settings.MONGO_DB, collection=mongo_collection_name
+            ),
+        )
 
 
 class TechnicalAndExpression(LogicalExpressionMixin, BaseStateExpression):
@@ -290,6 +326,7 @@ class TechnicalAndExpression(LogicalExpressionMixin, BaseStateExpression):
         ['balance>0', 'x>0']
 
     """
+
     __slots__ = ("dependent_variables", "expression")
 
     def __init__(self, dependent_vars, expressions):
@@ -327,6 +364,7 @@ class TechnicalOrExpression(LogicalExpressionMixin, BaseStateExpression):
         ['balance>0', 'x>0']
 
     """
+
     __slots__ = ("dependent_variables", "expression")
 
     def __init__(self, dependent_vars, expressions):
