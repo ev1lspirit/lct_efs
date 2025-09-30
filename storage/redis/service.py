@@ -30,7 +30,7 @@ class RedisCache(metaclass=GeneralPurposeSingletonMeta):
     def get_workflow_context(self, session_id: str):
         redis_key = f"workflow_context:{session_id}"
         try:
-            value: dict = self.r.get(redis_key)
+            value = self.r.hgetall(name=redis_key)
             return prepare_context_response(value)
         except Exception as exc:
             logger.error("Error: ")

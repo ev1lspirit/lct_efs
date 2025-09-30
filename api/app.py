@@ -167,7 +167,7 @@ if __name__ == "__main__":
         # print(f"Creation of Automaton used {memory_usage:.2f} KB of memory")
         # automaton.run()
 
-        wf_description_id = "68dbb045bb789931d1911ef5"
+        wf_description_id = "68dbf6f90bbf1f6933dd0fac"
 
         # body = {"states": test_json, "predefined_context": {"records": {"type": "A"}}}
         # response = test_client.post("/workflow/save", json=body)
@@ -176,8 +176,9 @@ if __name__ == "__main__":
         response = test_client.post(
             "/client/workflow",
             json={
-                "client_session_id": "01234567890",
+                "client_session_id": "11122",
                 "client_workflow_id": wf_description_id,
+                "event_name": "continue",
             },
         )
         assert response.status_code == 200

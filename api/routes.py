@@ -18,6 +18,7 @@ router = APIRouter()
 class WorkflowRequest(BaseModel):
     client_session_id: str
     client_workflow_id: Optional[str] = None
+    event_name: Optional[str] = None
 
 
 class SaveWorkflowRequest(BaseModel):
@@ -98,21 +99,10 @@ async def check_session(
         }
         redis_cache.update_session(body.client_session_id, session_context)
     try:
-        start_time = timeit.default_timer()
-        process = psutil.Process(os.getpid())
-        start_memory = process.memory_info().rss / 1024
         automaton  = Automaton(
             session_id=body.client_session_id, workflow_id=body.client_workflow_id
         )
-        end_memory = process.memory_info().rss / 1024
-        end_time = timeit.default_timer()
-        memory_usage = end_memory - start_memory
-
-        creation_time = end_time - start_time
-        print(f"Creation of Automaton took {creation_time:.2f} seconds")
-        print(f"Creation of Automaton used {memory_usage:.2f} KB of memory")
-
-        automaton.run()
+        automaton.run(body.event_name)
     except Exception as e:
         logger.error(f"Failed to create automaton. Error: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to create automaton. Error: {e}")

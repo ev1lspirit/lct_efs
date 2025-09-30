@@ -133,12 +133,14 @@ class Automaton:
         for expr in current_state.executables:
             result = expr.result(event_name)
             logger.info(f"Checking handler for event {expr.metadata.event_name}")
-            if result:
-                executable_transition = expr.metadata.transition_bind_object
+            if not result:
+                continue
+            executable_transitions = expr.metadata.transition_bind_object
+            for transition in executable_transitions:
                 logger.info(
-                    f"Found matching event handler, transition to: {executable_transition.state_id}"
+                    f"Found matching event handler, transition to: {transition.state_id}"
                 )
-                return executable_transition
+                return transition
 
     def _evaluate_executables(self, event_name: str = None):
         with self.session_context as context:
@@ -179,7 +181,7 @@ class Automaton:
             on_return = False
         return on_return
 
-    def run(self, event_name: str = None):
+    def run(self, event_name: Optional[str]):
         logger.info(
             f"Beginning pipeline with current state: {self.current_state.type_}"
         )
@@ -195,7 +197,7 @@ class Automaton:
                 if on_return:
                     # returns screen data
                     self._call_state_checkpoint()
-                    return
+                    return 
                 candidate = self._get_transition_candidates_based_on_event(
                     current_state=self.current_state, event_name=event_name
                 )

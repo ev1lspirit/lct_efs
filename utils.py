@@ -91,13 +91,25 @@ def prepare_context_response(context: dict):
         for k, v in context.items()
     }
 
-def dump_context(context: dict):
-    return {
-        k.decode(): (
-            json.dumps(v) if isinstance(v, (dict, list)) else v.decode()
-        )
-        for k, v in context.items()
-    }
+def dump_context(context_data: dict) -> dict:
+    """
+    Dumps the context data to a JSON-serializable format.
+
+    Args:
+        context_data (dict): The context data to dump.
+
+    Returns:
+        dict: The dumped context data.
+    """
+    dumped_context = {}
+    for key, value in context_data.items():
+        if isinstance(key, (bytes, bytearray)):
+            key = key.decode()
+        if isinstance(value, (dict, list)):
+            dumped_context[key] = json.dumps(value)
+        else:
+            dumped_context[key] = value.decode() if isinstance(value, (bytes, bytearray)) else value
+    return dumped_context
 
 class GeneralPurposeSingletonMeta(type):
     __instances: dict = {}
