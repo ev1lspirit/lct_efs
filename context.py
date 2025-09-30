@@ -42,13 +42,13 @@ class SessionContext:
             raise e
 
     def update_session_state(self, data: StateMetadata):
-        logger.info("Updating session state: %s with data: %s", self._session_id, json.dumps(data))
+        logger.info("Updating session state: %s with data: %s", self._session_id)
         try:
             self._redis_cache.save_state(self._session_id, data.model_dump())
         except Exception as e:
             logger.error(f"Failed to update session state. Error: {e}")
             raise e
-        
+
     def get_session_state(self):
         state_meta = self._redis_cache.get_state(self._session_id)
         return StateMetadata(
@@ -59,4 +59,8 @@ class SessionContext:
     def update_session(self):
         if hasattr(self, "_session") and self._session is not None:
             logger.info("Updating session: %s with data: %s", self._session_id, json.dumps(self._session))
-            self._redis_cache.update_session(self._session_id, self._session)
+            flat_context = {
+                k: json.dumps(v) if isinstance(v, (dict, list)) else v
+                for k, v in self.session.items()
+            }
+            self._redis_cache.update_session(self._session_id, flat_context)

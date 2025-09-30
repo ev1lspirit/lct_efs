@@ -1,4 +1,7 @@
 from functools import wraps
+import json
+from config import settings
+import time
 from typing import Any, Optional, Type
 import logging
 
@@ -37,6 +40,7 @@ def setup_logging():
 
 logger = logging.getLogger(__name__)
 
+
 def field_typechecker(type_: Type[Any]):
 
     def inner_handler(instance, attribute, value):
@@ -69,6 +73,23 @@ def execute_safe(default_return=None, service_name: Optional[str] = None):
 
     return decorator
 
+
+def call_deadlock_protection(start_time):
+    if (time.time() - start_time) > settings.DEADLOCK_TIMEOUT:
+        raise Exception("Deadlock detected. Aborting.")
+
+
+def prepare_context_response(context: dict):
+    if isinstance(context, (bytes, bytearray)):
+        context = context.decode()
+    if isinstance(context, str):
+        return json.loads(context)
+    return {
+        k.decode(): (
+            json.loads(v) if v.startswith(b"{") or v.startswith(b"[") else v.decode()
+        )
+        for k, v in context.items()
+    }
 
 class GeneralPurposeSingletonMeta(type):
     __instances: dict = {}

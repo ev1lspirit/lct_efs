@@ -43,19 +43,21 @@ async def save_workflow(
         state_list = [state.model_dump() for state in body.states.states]
         state_dict = {"states": state_list}
         # Сохраняем документ в MongoDB
-        wf_context_id = workflow_context_client.insert_description(body.predefined_context)
-        inserted_states_id = states_mongo_client.insert_description(state_dict)
-
-        if inserted_states_id is None:
+        inserted_workflow_id = states_mongo_client.insert_description(state_dict)
+        if inserted_workflow_id is None:
             raise HTTPException(status_code=500, detail="Failed to save state to MongoDB")
+
+        wf_context_id = workflow_context_client.insert_description(
+            body.predefined_context, overriden_id=inserted_workflow_id
+        )
         if wf_context_id is None:
             raise HTTPException(status_code=500, detail="Failed to save workflow context to MongoDB")
 
-        logger.info(f"State successfully saved with ID: {inserted_states_id}")
-        if inserted_states_id:
+        logger.info(f"State successfully saved with ID: {inserted_workflow_id}")
+        if inserted_workflow_id:
             return {
                 "status": "success",
-                "wf_description_id": inserted_states_id,
+                "wf_description_id": inserted_workflow_id,
                 "wf_context_id": wf_context_id,
             }
         else:

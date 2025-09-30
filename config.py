@@ -39,6 +39,8 @@ class Settings:
     WORKFLOW_MONGO_COLLECTION = "workflow_context"
     STATES_MONGO_COLLECTION = "states"
 
+    DEADLOCK_TIMEOUT = 30
+
     @property
     def database_url(self):
         return (

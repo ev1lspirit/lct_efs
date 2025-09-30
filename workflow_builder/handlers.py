@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from functools import wraps
 import inspect
+import json
 from urllib.parse import urlparse
 from venv import logger
 from attr import define
@@ -96,19 +97,30 @@ class DependencyHandler(BaseHandler):
     context: "SessionContext"
 
     def result(self):
-        workflow_context = self.metadata.mongo_client.get(self.context._workflow_id)
-        if not isinstance(workflow_context, dict):
-            logger.error(f"Workflow context {self.context._workflow_id} not found")
-            raise ValueError(f"Workflow context for {self.context._workflow_id} not found")
-
-        self.metadata.redis_client.set_workflow_context(
-            session_id=self.context._session_id, context=workflow_context
+        context_key = self.metadata.redis_client.get_wf_context_key(
+            session_id=self.context._workflow_id
         )
+        if not self.metadata.redis_client.r.exists(context_key):
+            workflow_context = self.metadata.mongo_client.get(self.context._workflow_id)
+            if not isinstance(workflow_context, dict):
+                logger.error(f"Workflow context {self.context._workflow_id} not found")
+                raise ValueError(f"Workflow context for {self.context._workflow_id} not found")
+
+            wf_context_json = {
+                k: json.dumps(v) if isinstance(v, (dict, list)) else v
+                for k, v in workflow_context.items()
+            }
+            self.metadata.redis_client.set_workflow_context(
+                session_id=self.context._workflow_id, context=wf_context_json
+            )
+        else:
+            workflow_context = self.metadata.redis_client.get_workflow_context(
+                session_id=self.context._workflow_id
+            )
+
         if workflow_context:
-            logger.warning("Workflow context is not get.")
-            workflow_context = {}
-        with self.context as context:
-            context.update(workflow_context)
+            with self.context as context:
+                context.update(workflow_context)
         return workflow_context
 
 

@@ -77,7 +77,7 @@ class MongoDBClient:
             print(f"Error updating document: {e}")
             return False
 
-    def insert_description(self, description_data: Dict[str, Any]) -> Optional[str]:
+    def insert_description(self, description_data: Dict[str, Any], overriden_id: str = None) -> Optional[str]:
         """
         Добавляет новое JSON-описание в коллекцию.
         Args:
@@ -86,6 +86,8 @@ class MongoDBClient:
             ID вставленного документа в виде строки или None в случае ошибки
         """
         try:
+            if overriden_id:
+                description_data["_id"] = ObjectId(overriden_id)
             result = self.collection.insert_one(description_data)
             return str(result.inserted_id)
         except pymongo.errors.DuplicateKeyError as e:
