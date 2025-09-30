@@ -9,6 +9,7 @@ from workflow_builder.models import StateTypeEnum
 from workflow_builder.state_parser.contract import STATE_CLASSES, StateModel
 from workflow_builder.state_parser.parser import GlobalStateParser
 from workflow_builder.transitions import Transition
+from config import settings
 
 if TYPE_CHECKING:
     from ..states import WorkflowState
@@ -21,11 +22,11 @@ class Automaton:
         self._session_id = session_id
         self._workflow_id = workflow_id
 
-        self.zero_state = "__service_Init"
+        self.zero_state = settings.SERVICE_INIT_STATE
         self.session_context = SessionContext(session_id=session_id, workflow_id=self._workflow_id)
-        self.default_state = self._resolve_initial_state().name
+        self.initial_state_name = self._resolve_initial_state().name
         self.global_state_parser = GlobalStateParser(
-            current_state_name=self.default_state, workflow_id=self._workflow_id
+            current_state_name=self.initial_state_name, workflow_id=self._workflow_id
         )
         self.states = self._create_states()
         self.state_mapping = {
@@ -61,11 +62,20 @@ class Automaton:
         return partialled_cls(expressions=expressions)
 
     def _create_states(self):
+        if self.initial_state_name == settings.SERVICE_INIT_STATE:
+            next_state = next(filter(attrgetter("initial_state"), self.global_state_parser.data), None)
+            if next_state is None:
+                logger.error(f"No initial state found! WF: {self._workflow_id}, Session: {self._session_id}")
+                raise ValueError("No initial state found")
+            next_state_name = next_state.name
+        else:
+            next_state_name = self.initial_state_name
+        _zero_state_model = StateModel.zero_state(next_state_name)
+        self.global_state_parser.data = [
+            _zero_state_model
+        ] + self.global_state_parser.data
         states = self.global_state_parser.get_automaton_subgraph()
-        first_state = next(filter(attrgetter("initial_state"), states))
-        _zero_state_model = StateModel.zero_state(first_state.name)
-        _zero_state = self.build_state(_zero_state_model)
-        return [_zero_state] + [self.build_state(state) for state in states]
+        return [self.build_state(state) for state in states]
 
     @property
     def current_state(self) -> "WorkflowState":
@@ -150,7 +160,6 @@ class Automaton:
                 else partial(self._evaluate_executables, event_name)
             )
             evaluator()
-
             if self.current_state.type_ == StateTypeEnum.screen:
                 # подгрузить экран и отправить экран
                 current_state_data = StateMetadata(name=self.current_state.name, type_=self.current_state.type_)

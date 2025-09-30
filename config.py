@@ -35,6 +35,8 @@ class Settings:
     MONGO_AUTH_DB = os.environ.get("MONGO_AUTH_DB", "admin")
     MONGO_DB = os.environ.get("MONGO_DB", "test")
 
+    SERVICE_INIT_STATE = "__service_Init"
+
     @property
     def database_url(self):
         return (

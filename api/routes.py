@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from storage.mongo.client import MongoDBClient, get_mongo_client_as_dependency
 from storage.redis.service import RedisCache, get_redis_cache
+from workflow_builder.automaton.automaton import Automaton
 from workflow_builder.state_parser.contract import StateSet
 
 router = APIRouter()
@@ -55,8 +56,6 @@ async def check_session(
     Check/create client session and get/initialize workflow state
     """
     session_key = redis_cache.get_session_key(body.client_session_id)
-    state_key = f"state:{body.client_session_id}"
-
     # Check if session exists
     if redis_cache.r.exists(session_key):
         session_context = redis_cache.get_session(body.client_session_id)
@@ -74,13 +73,13 @@ async def check_session(
             "__created_at": str(datetime.now()),
         }
         redis_cache.update_session(body.client_session_id, session_context)
-
-    # Get or initialize workflow state
-    current_state = redis_cache.r.get(state_key)
-    if not current_state:
-        pass
+    try:
+        automaton = Automaton(session_id=body.client_session_id, workflow_id=body.client_workflow_id)
+        automaton.run()
+    except Exception as e:
+        logger.error(f"Failed to create automaton. Error: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to create automaton. Error: {e}")
     return {
         "session_id": body.client_session_id,
         "context": session_context,
-        "current_state": current_state,
     }

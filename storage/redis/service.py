@@ -33,7 +33,7 @@ class RedisCache(metaclass=GeneralPurposeSingletonMeta):
             raise exc
 
     def get_state(self, session_id: str):
-        redis_key = self.get_session_state_key(session_id)
+        redis_key = f"state:{session_id}"
         return self.r.hgetall(redis_key)
 
     def create_session(self, data: dict) -> str:

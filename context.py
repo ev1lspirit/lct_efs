@@ -3,6 +3,7 @@ import logging
 from storage.redis.service import RedisCache
 from workflow_builder.automaton.models import StateMetadata
 from workflow_builder.models import StateTypeEnum
+from config import settings
 
 
 logger = logging.getLogger(__name__)
@@ -42,13 +43,17 @@ class SessionContext:
 
     def update_session_state(self, data: StateMetadata):
         logger.info("Updating session state: %s with data: %s", self._session_id, json.dumps(data))
-        self._redis_cache.save_state(self._session_id, data.model_dump())
-
+        try:
+            self._redis_cache.save_state(self._session_id, data.model_dump())
+        except Exception as e:
+            logger.error(f"Failed to update session state. Error: {e}")
+            raise e
+        
     def get_session_state(self):
         state_meta = self._redis_cache.get_state(self._session_id)
         return StateMetadata(
-            name=state_meta.get("name", "Init"),
-            type_=StateTypeEnum(state_meta.get("type", "technical")),
+            name=state_meta.get("name", settings.SERVICE_INIT_STATE),
+            type_=StateTypeEnum(state_meta.get("type", "service")),
         )
 
     def update_session(self):
