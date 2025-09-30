@@ -1,10 +1,13 @@
 import json
 import os
+import uuid
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
 from fastapi.testclient import TestClient
 
+from api.testWorkflow import test_workflow_1_simple_login
 from storage.postgres.crud import workflow
+from utils import setup_logging
 from workflow_builder.automaton.automaton import Automaton
 from .routes import router
 import uvicorn
@@ -13,6 +16,7 @@ import uvicorn
 async def lifespan(app: FastAPI):
     yield
 
+setup_logging()
 app = FastAPI(lifespan=lifespan)
 app.include_router(router)
 
@@ -167,21 +171,32 @@ if __name__ == "__main__":
         # print(f"Creation of Automaton used {memory_usage:.2f} KB of memory")
         # automaton.run()
 
-        wf_description_id = "68dbf6f90bbf1f6933dd0fac"
+        global_session_id = str(uuid.uuid4())
 
-        # body = {"states": test_json, "predefined_context": {"records": {"type": "A"}}}
-        # response = test_client.post("/workflow/save", json=body)
-        # assert response.status_code == 200
-        # resp_json = response.json()
-        response = test_client.post(
-            "/client/workflow",
-            json={
-                "client_session_id": "11122",
-                "client_workflow_id": wf_description_id,
-                "event_name": "continue",
-            },
-        )
-        assert response.status_code == 200
+        def save_workflow_and_test_events():
+            body = {
+                "states": test_workflow_1_simple_login(),
+                "predefined_context": {"username": "abc112", "password": "12345678910"}
+            }
+            response = test_client.post("/workflow/save", json=body)
+            assert response.status_code == 200
+            resp_json = response.json()
+
+            events = [None, "submit", "logout"]
+            for event in events:
+                if event == "logout":
+                    print()
+                response = test_client.post(
+                    "/client/workflow",
+                    json={
+                    "client_session_id": global_session_id,
+                    "client_workflow_id": resp_json["wf_description_id"],
+                    "event_name": event,
+                    },
+                )
+            assert response.status_code == 200
+
+        save_workflow_and_test_events()
 
     def test_user_session():
         client_session_id = "1234567890"

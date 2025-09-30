@@ -18,6 +18,7 @@ router = APIRouter()
 class WorkflowRequest(BaseModel):
     client_session_id: str
     client_workflow_id: Optional[str] = None
+    # context: dict[str, Any] = {}
     event_name: Optional[str] = None
 
 
