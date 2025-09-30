@@ -1,21 +1,30 @@
+from functools import partial
 from pprint import pprint
 from pymongo import MongoClient
 from bson.objectid import ObjectId
 from typing import Optional, Dict, Any
+
+import pymongo
+import pymongo.errors
 from config import settings
 
 
 class MongoDBClient:
     def __init__(self, database: str, collection: str):
-        # Формируем строку подключения
-        if settings.MONGO_USER and settings.MONGO_PASSWORD:
-            uri = f"mongodb://{settings.MONGO_USER}:{settings.MONGO_PASSWORD}@{settings.MONGO_HOST}:{settings.MONGO_PORT}/{settings.MONGO_AUTH_DB}"
-        else:
-            uri = f"mongodb://{settings.MONGO_HOST}:{settings.MONGO_PORT}"
-
-        self.client = MongoClient(uri)
+        self.client = MongoClient(settings.mongo_url)
         self.db = self.client[database]
         self.collection = self.db[collection]
+
+    def get(self, id: str) -> Optional[Dict[str, Any]]:
+        try:
+            document = self.collection.find_one({"_id": ObjectId(id)})
+            if document:
+                # Преобразуем ObjectId в строку для JSON-сериализации
+                document["_id"] = str(document["_id"])
+            return document
+        except Exception as e:
+            print(f"Error retrieving document: {e}")
+            return None
 
     def get_all(self, filter: Optional[Dict[str, Any]] = None) -> list:
         """
@@ -38,7 +47,6 @@ class MongoDBClient:
             Словарь с данными или None, если документ не найден
         """
         try:
-            pprint(self.get_all())
             document = self.collection.find_one({"_id": ObjectId(description_id)})
             if document:
                 # Преобразуем ObjectId в строку для JSON-сериализации
@@ -68,7 +76,7 @@ class MongoDBClient:
             print(f"Error updating document: {e}")
             return False
 
-    def insert_description(self, description_data: Dict[str, Any]) -> Optional[str]:
+    def insert_description(self, description_data: Dict[str, Any], overriden_id: str = None) -> Optional[str]:
         """
         Добавляет новое JSON-описание в коллекцию.
         Args:
@@ -77,8 +85,13 @@ class MongoDBClient:
             ID вставленного документа в виде строки или None в случае ошибки
         """
         try:
+            if overriden_id:
+                description_data["_id"] = ObjectId(overriden_id)
             result = self.collection.insert_one(description_data)
             return str(result.inserted_id)
+        except pymongo.errors.DuplicateKeyError as e:
+            print(f"Duplicate key error: {e}")
+            return None
         except Exception as e:
             print(f"Error inserting document: {e}")
             return None
@@ -95,11 +108,12 @@ def get_mongo_client_as_dependency():
     Создает и возвращает MongoDBClient как зависимость.
     Автоматически закрывает соединение после использования.
     """
-    mongo_client = MongoDBClient(database="lct_efs", collection="states")
-    try:
-        yield mongo_client
-    finally:
-        mongo_client.__del__()  # Явно вызываем метод закрытия соединения
+    mongo_client = partial(
+        MongoDBClient,
+        database=settings.MONGO_DB,
+    )
+    yield mongo_client
+
 
 
 def get_mongo_client():
@@ -110,18 +124,3 @@ def get_mongo_client():
     mongo_client = MongoDBClient(database="lct_efs", collection="states")
     return mongo_client
 
-
-# Пример использования:
-if __name__ == "__main__":
-    # Инициализация клиента
-    mongo_client = MongoDBClient(database="mydb", collection="descriptions")
-
-    # Пример получения описания
-    description = mongo_client.retrieve_description("507f1f77bcf86cd799439011")
-    if description:
-        print("Retrieved description:", description)
-
-    # Пример обновления описания
-    update_data = {"field1": "new_value", "field2": 42}
-    success = mongo_client.update_description("507f1f77bcf86cd799439011", update_data)
-    print("Update successful:", success)

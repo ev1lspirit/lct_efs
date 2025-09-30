@@ -1,10 +1,14 @@
 from abc import ABC, abstractmethod
+from enum import StrEnum
 from functools import wraps
 import inspect
 from urllib.parse import urlparse
-from attr import define
+from venv import logger
+from attr import define, field
 from typing import TYPE_CHECKING, Any, Callable, Optional, TypeVar
 from simpleeval import simple_eval
+
+from utils import dump_context
 
 
 if TYPE_CHECKING:
@@ -13,9 +17,15 @@ if TYPE_CHECKING:
         IntegrationStateExpression,
         TechnicalStateExpression,
         ScreenStateExpression,
+        ServiceStateExpression,
     )
 
 HandlerClass = TypeVar("HandlerClass")
+
+
+class BehaviourTypeEnum(StrEnum):
+    init = "init"
+    error = "error"
 
 
 def check_context_consistency(function: Callable):
@@ -30,13 +40,17 @@ def check_context_consistency(function: Callable):
                 f"Expected {BaseHandler.__name__}, got {type(self).__name__}"
             )
         if hasattr(self.metadata, "dependent_variables"):
-            if not all(var in self.context.session for var in self.metadata.dependent_variables):
+            if not all(
+                var in self.context.session for var in self.metadata.dependent_variables
+            ):
                 missing_vars = [
                     var
                     for var in self.metadata.dependent_variables
                     if var not in self.context.session
                 ]
-                raise ValueError(f"Missing dependent variables in context: {missing_vars}")
+                raise ValueError(
+                    f"Missing dependent variables in context: {missing_vars}"
+                )
         return function(self, *args, **kwargs)
 
     return wrapper
@@ -45,7 +59,7 @@ def check_context_consistency(function: Callable):
 class BaseHandler(ABC):
     __slots__ = ("metadata", "context")
     metadata: Any
-    context: 'SessionContext'
+    context: "SessionContext"
 
     @abstractmethod
     def result(self) -> Any:
@@ -54,8 +68,8 @@ class BaseHandler(ABC):
 
 @define(slots=True)
 class ScreenHandler(BaseHandler):
-    metadata: 'ScreenStateExpression'
-    context: 'SessionContext'
+    metadata: "ScreenStateExpression"
+    context: "SessionContext"
 
     def result(self, event_name: Optional[str] = None) -> bool:
         """Проверяет, совпадает ли переданное событие с событием в metadata"""
@@ -63,10 +77,11 @@ class ScreenHandler(BaseHandler):
             return False
         return self.metadata.event_name == event_name
 
+
 @define(slots=True)
 class TechnicalHandler(BaseHandler):
-    metadata: 'TechnicalStateExpression'
-    context: 'SessionContext'
+    metadata: "TechnicalStateExpression"
+    context: "SessionContext"
 
     @check_context_consistency
     def result(self):
@@ -84,10 +99,51 @@ class TechnicalHandler(BaseHandler):
 
 
 @define(slots=True)
+class DependencyHandler(BaseHandler):
+    metadata: "ServiceStateExpression"
+    context: "SessionContext"
+    behaviour_type: BehaviourTypeEnum = field(default=BehaviourTypeEnum.init)
+
+    def result(self):
+        if self.behaviour_type == BehaviourTypeEnum.init:
+            return self.init_result()
+        elif self.behaviour_type == BehaviourTypeEnum.error:
+            return self.error_result()
+        else:
+            raise ValueError(f"Unknown behaviour type: {self.behaviour_type}")
+
+    def error_result(self):
+        return
+
+    def init_result(self):
+        context_key = self.metadata.redis_client.get_wf_context_key(
+            session_id=self.context._workflow_id
+        )
+        if not self.metadata.redis_client.r.exists(context_key):
+            workflow_context = self.metadata.mongo_client.get(self.context._workflow_id)
+            if not isinstance(workflow_context, dict):
+                logger.error(f"Workflow context {self.context._workflow_id} not found")
+                raise ValueError(f"Workflow context for {self.context._workflow_id} not found")
+
+            wf_context_json = dump_context(workflow_context)
+            self.metadata.redis_client.set_workflow_context(
+                session_id=self.context._workflow_id, context=wf_context_json
+            )
+        else:
+            workflow_context = self.metadata.redis_client.get_workflow_context(
+                session_id=self.context._workflow_id
+            )
+        if not (workflow_context.keys() & self.context.session.keys()):
+            with self.context as context:
+                context.update(workflow_context)
+        return workflow_context
+
+
+@define(slots=True)
 class IntegrationHandler(BaseHandler):
     adapter: Any  # CommonAdapter  # type: ignore[name-defined]
-    metadata: 'IntegrationStateExpression'
-    context: 'SessionContext'
+    metadata: "IntegrationStateExpression"
+    context: "SessionContext"
 
     def _split_url(self):
         parsed = urlparse(self.metadata.url)
@@ -102,7 +158,7 @@ class IntegrationHandler(BaseHandler):
         return method_attr
 
     @check_context_consistency
-    def result(self): # type: ignore
+    def result(self):  # type: ignore
         base_url, endpoint = self._split_url()
         adapter = self.adapter(base_url=base_url)
         method_attr = self._get_method(adapter)

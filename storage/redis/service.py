@@ -1,9 +1,12 @@
 import json
+import logging
 import uuid
 import redis
 from config import settings
-from utils import GeneralPurposeSingletonMeta, execute_safe
+from utils import GeneralPurposeSingletonMeta, execute_safe, prepare_context_response
 
+
+logger = logging.getLogger(__name__)
 
 class RedisCache(metaclass=GeneralPurposeSingletonMeta):
     def __init__(self):
@@ -13,9 +16,30 @@ class RedisCache(metaclass=GeneralPurposeSingletonMeta):
         redis_key = self.get_session_state_key(session_id)
         self.r.hset(redis_key, mapping=state_obj)
 
+    def get_wf_context_key(self, session_id: str):
+        return f"workflow_context:{session_id}"
+
+    def set_workflow_context(self, session_id: str, context: dict):
+        redis_key = self.get_wf_context_key(session_id)
+        try:
+            self.r.hset(redis_key, mapping=context)
+        except Exception as exc:
+            logger.error("Error: ")
+            raise exc
+
+    def get_workflow_context(self, session_id: str):
+        redis_key = f"workflow_context:{session_id}"
+        try:
+            value = self.r.hgetall(name=redis_key)
+            return prepare_context_response(value)
+        except Exception as exc:
+            logger.error("Error: ")
+            raise exc
+
     def get_state(self, session_id: str):
-        redis_key = self.get_session_state_key(session_id)
-        return self.r.hgetall(redis_key)
+        redis_key = f"state:{session_id}"
+        state = self.r.hgetall(redis_key)
+        return prepare_context_response(state)
 
     def create_session(self, data: dict) -> str:
         """
@@ -37,11 +61,12 @@ class RedisCache(metaclass=GeneralPurposeSingletonMeta):
         :return: словарь с данными сессии или None, если сессия не существует
         """
         raw = self.r.hgetall(self.get_session_key(session_id))
-        return {k.decode(): v.decode() for k, v in raw.items()} if raw else None
+        return prepare_context_response(raw)
 
     def update_session(self, session_id: str, data: dict, ttl: int = 3600):
         key = self.get_session_key(session_id)
-        self.r.hset(key, mapping=data)
+        if data:
+            self.r.hset(key, mapping=data)
 
     def delete_session(self, session_id: str):
         self.r.delete(self.get_session_key(session_id))
@@ -84,7 +109,10 @@ class RedisCache(metaclass=GeneralPurposeSingletonMeta):
 
     @execute_safe(default_return=None, service_name="Redis")
     def get_all_screens(self, index_name: str = "screen"):
-        return self.r.scan_iter(f"{index_name}:*")
+        results = []
+        for result in self.r.scan_iter(f"{index_name}:*"):
+            results.append(prepare_context_response(result))
+        return results
 
 
 def get_redis_cache():

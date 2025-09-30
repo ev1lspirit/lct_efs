@@ -3,6 +3,7 @@ import logging
 from storage.redis.service import RedisCache
 from workflow_builder.automaton.models import StateMetadata
 from workflow_builder.models import StateTypeEnum
+from config import settings
 
 
 logger = logging.getLogger(__name__)
@@ -10,8 +11,9 @@ logger = logging.getLogger(__name__)
 class SessionContext:
     _redis_cache: RedisCache = RedisCache()
 
-    def __init__(self, session_id):
-        self.__session_id = session_id
+    def __init__(self, session_id, workflow_id: str):
+        self._session_id = session_id
+        self._workflow_id = workflow_id
 
     @property
     def session(self):
@@ -21,7 +23,7 @@ class SessionContext:
 
     def _get_session_context(self):
         try:
-            return self._redis_cache.get_session(self.__session_id)
+            return self._redis_cache.get_session(self._session_id)
         except Exception as e:
             logger.error(f"Failed to get session. Error: {e}")
             raise e
@@ -40,17 +42,25 @@ class SessionContext:
             raise e
 
     def update_session_state(self, data: StateMetadata):
-        logger.info("Updating session state: %s with data: %s", self.__session_id, json.dumps(data))
-        self._redis_cache.save_state(self.__session_id, data.model_dump())
+        logger.info("Updating session state: %s with data: %s", self._session_id)
+        try:
+            self._redis_cache.save_state(self._session_id, data.model_dump())
+        except Exception as e:
+            logger.error(f"Failed to update session state. Error: {e}")
+            raise e
 
     def get_session_state(self):
-        state_meta = self._redis_cache.get_state(self.__session_id)
+        state_meta = self._redis_cache.get_state(self._session_id)
         return StateMetadata(
-            name=state_meta.get("name", "Init"),
-            type_=StateTypeEnum(state_meta.get("type", "technical".upper())),
+            name=state_meta.get("name", settings.SERVICE_INIT_STATE),
+            type_=StateTypeEnum(state_meta.get("type", "service")),
         )
 
     def update_session(self):
         if hasattr(self, "_session") and self._session is not None:
-            logger.info("Updating session: %s with data: %s", self.__session_id, json.dumps(self._session))
-            self._redis_cache.update_session(self.__session_id, self._session)
+            logger.info("Updating session: %s with data: %s", self._session_id, json.dumps(self._session))
+            flat_context = {
+                k: json.dumps(v) if isinstance(v, (dict, list)) else v
+                for k, v in self.session.items()
+            }
+            self._redis_cache.update_session(self._session_id, flat_context)
