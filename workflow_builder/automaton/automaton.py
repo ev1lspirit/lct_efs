@@ -3,8 +3,6 @@ import logging
 from operator import attrgetter
 import time
 from typing import TYPE_CHECKING, Optional
-
-from py import log
 from context import SessionContext
 from utils import call_deadlock_protection
 from workflow_builder.automaton.models import StateMetadata
@@ -84,10 +82,10 @@ class Automaton:
             next_state_name = next_state.name
         else:
             next_state_name = self.initial_state_name
+        _error_state_model = StateModel.error_state()
         _zero_state_model = StateModel.zero_state(next_state_name)
-        self.global_state_parser.data = [
-            _zero_state_model
-        ] + self.global_state_parser.data
+        self.global_state_parser.data = [_zero_state_model
+        ] + self.global_state_parser.data + [_error_state_model]
         states = self.global_state_parser.get_automaton_subgraph()
         return [self.build_state(state) for state in states]
 
@@ -194,8 +192,8 @@ class Automaton:
                 break
 
             if self.current_state.type_ == StateTypeEnum.screen:
-                # returns screen data
                 if on_return:
+                    # returns screen data
                     self._call_state_checkpoint()
                     return
                 candidate = self._get_transition_candidates_based_on_event(

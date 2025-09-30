@@ -1,7 +1,10 @@
 from datetime import datetime
+import os
+import timeit
 from typing import Any, Callable, Optional
 from venv import logger
 from fastapi import APIRouter, Depends, HTTPException
+import psutil
 from pydantic import BaseModel
 from storage.mongo.client import MongoDBClient, get_mongo_client_as_dependency
 from storage.redis.service import RedisCache, get_redis_cache
@@ -95,7 +98,20 @@ async def check_session(
         }
         redis_cache.update_session(body.client_session_id, session_context)
     try:
-        automaton = Automaton(session_id=body.client_session_id, workflow_id=body.client_workflow_id)
+        start_time = timeit.default_timer()
+        process = psutil.Process(os.getpid())
+        start_memory = process.memory_info().rss / 1024
+        automaton  = Automaton(
+            session_id=body.client_session_id, workflow_id=body.client_workflow_id
+        )
+        end_memory = process.memory_info().rss / 1024
+        end_time = timeit.default_timer()
+        memory_usage = end_memory - start_memory
+
+        creation_time = end_time - start_time
+        print(f"Creation of Automaton took {creation_time:.2f} seconds")
+        print(f"Creation of Automaton used {memory_usage:.2f} KB of memory")
+
         automaton.run()
     except Exception as e:
         logger.error(f"Failed to create automaton. Error: {e}")

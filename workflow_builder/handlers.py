@@ -1,10 +1,10 @@
 from abc import ABC, abstractmethod
+from enum import StrEnum
 from functools import wraps
 import inspect
-import json
 from urllib.parse import urlparse
 from venv import logger
-from attr import define
+from attr import define, field
 from typing import TYPE_CHECKING, Any, Callable, Optional, TypeVar
 from simpleeval import simple_eval
 
@@ -21,6 +21,11 @@ if TYPE_CHECKING:
     )
 
 HandlerClass = TypeVar("HandlerClass")
+
+
+class BehaviourTypeEnum(StrEnum):
+    init = "init"
+    error = "error"
 
 
 def check_context_consistency(function: Callable):
@@ -97,8 +102,20 @@ class TechnicalHandler(BaseHandler):
 class DependencyHandler(BaseHandler):
     metadata: "ServiceStateExpression"
     context: "SessionContext"
+    behaviour_type: BehaviourTypeEnum = field(default=BehaviourTypeEnum.init)
 
     def result(self):
+        if self.behaviour_type == BehaviourTypeEnum.init:
+            return self.init_result()
+        elif self.behaviour_type == BehaviourTypeEnum.error:
+            return self.error_result()
+        else:
+            raise ValueError(f"Unknown behaviour type: {self.behaviour_type}")
+
+    def error_result(self):
+        return
+
+    def init_result(self):
         context_key = self.metadata.redis_client.get_wf_context_key(
             session_id=self.context._workflow_id
         )

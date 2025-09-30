@@ -47,7 +47,6 @@ class MongoDBClient:
             Словарь с данными или None, если документ не найден
         """
         try:
-            pprint(self.get_all())
             document = self.collection.find_one({"_id": ObjectId(description_id)})
             if document:
                 # Преобразуем ObjectId в строку для JSON-сериализации
@@ -125,18 +124,3 @@ def get_mongo_client():
     mongo_client = MongoDBClient(database="lct_efs", collection="states")
     return mongo_client
 
-
-# Пример использования:
-if __name__ == "__main__":
-    # Инициализация клиента
-    mongo_client = MongoDBClient(database="mydb", collection="descriptions")
-
-    # Пример получения описания
-    description = mongo_client.retrieve_description("507f1f77bcf86cd799439011")
-    if description:
-        print("Retrieved description:", description)
-
-    # Пример обновления описания
-    update_data = {"field1": "new_value", "field2": 42}
-    success = mongo_client.update_description("507f1f77bcf86cd799439011", update_data)
-    print("Update successful:", success)

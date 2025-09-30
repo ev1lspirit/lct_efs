@@ -7,6 +7,7 @@ from workflow_builder.states import (
     ServiceState,
     TechnicalState,
 )
+from config import settings
 
 
 class TransitionModel(BaseModel):
@@ -51,7 +52,7 @@ class StateModel(BaseModel):
     def zero_state(cls, next_state_name: str):
         return cls(
             state_type="service",
-            name=f"__service_Init",
+            name=settings.SERVICE_INIT_STATE,
             transitions=[
                 TransitionModel(case=None, state_id=next_state_name, variable=None)
             ],
@@ -59,6 +60,18 @@ class StateModel(BaseModel):
             expressions=[],
             events=[],
             final_state=False,
+        )
+
+    @classmethod
+    def error_state(cls):
+        return cls(
+            state_type="service",
+            name=settings.SERVICE_ERROR_STATE,
+            transitions=[],
+            initial_state=False,
+            expressions=[],
+            events=[],
+            final_state=True,
         )
 
 
