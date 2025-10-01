@@ -1,12 +1,14 @@
 from functools import partial
-from pprint import pprint
-from pymongo import MongoClient
+from pymongo import MongoClient, ASCENDING
 from bson.objectid import ObjectId
 from typing import Optional, Dict, Any
+import logging
 
 import pymongo
 import pymongo.errors
 from config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class MongoDBClient:
@@ -14,16 +16,21 @@ class MongoDBClient:
         self.client = MongoClient(settings.mongo_url)
         self.db = self.client[database]
         self.collection = self.db[collection]
+        logger.info(f"MongoDB client initialized: database='{database}', collection='{collection}'")
 
     def get(self, id: str) -> Optional[Dict[str, Any]]:
         try:
+            logger.debug(f"Fetching document with id={id} from {self.db.name}.{self.collection.name}")
             document = self.collection.find_one({"_id": ObjectId(id)})
             if document:
-                # Преобразуем ObjectId в строку для JSON-сериализации
+                document = dict(document)  # ensure mutable copy
                 document["_id"] = str(document["_id"])
+                logger.debug(f"Document found: {id}")
+            else:
+                logger.warning(f"Document not found: {id} in {self.db.name}.{self.collection.name}")
             return document
         except Exception as e:
-            print(f"Error retrieving document: {e}")
+            logger.error(f"Error retrieving document {id} from {self.db.name}.{self.collection.name}: {e}", exc_info=True)
             return None
 
     def get_all(self, filter: Optional[Dict[str, Any]] = None) -> list:
@@ -47,13 +54,17 @@ class MongoDBClient:
             Словарь с данными или None, если документ не найден
         """
         try:
+            logger.debug(f"Retrieving description with id={description_id} from {self.db.name}.{self.collection.name}")
             document = self.collection.find_one({"_id": ObjectId(description_id)})
             if document:
-                # Преобразуем ObjectId в строку для JSON-сериализации
+                document = dict(document)
                 document["_id"] = str(document["_id"])
+                logger.debug(f"Description found: {description_id}")
+            else:
+                logger.warning(f"Description not found: {description_id} in {self.db.name}.{self.collection.name}")
             return document
         except Exception as e:
-            print(f"Error retrieving document: {e}")
+            logger.error(f"Error retrieving description {description_id} from {self.db.name}.{self.collection.name}: {e}", exc_info=True)
             return None
 
     def update_description(
@@ -68,12 +79,17 @@ class MongoDBClient:
             True если обновление успешно, False в случае ошибки
         """
         try:
+            logger.debug(f"Updating description {description_id} in {self.db.name}.{self.collection.name}")
             result = self.collection.update_one(
                 {"_id": ObjectId(description_id)}, {"$set": update_data}
             )
+            if result.modified_count > 0:
+                logger.info(f"Description {description_id} updated successfully")
+            else:
+                logger.warning(f"Description {description_id} not modified (already up to date or not found)")
             return result.modified_count > 0
         except Exception as e:
-            print(f"Error updating document: {e}")
+            logger.error(f"Error updating description {description_id}: {e}", exc_info=True)
             return False
 
     def insert_description(self, description_data: Dict[str, Any], overriden_id: str = None) -> Optional[str]:
@@ -87,14 +103,51 @@ class MongoDBClient:
         try:
             if overriden_id:
                 description_data["_id"] = ObjectId(overriden_id)
+                logger.debug(f"Inserting description with custom ID: {overriden_id}")
             result = self.collection.insert_one(description_data)
+            logger.info(f"Description inserted successfully with ID: {result.inserted_id}")
             return str(result.inserted_id)
         except pymongo.errors.DuplicateKeyError as e:
-            print(f"Duplicate key error: {e}")
+            logger.error(f"Duplicate key error when inserting description: {e}")
             return None
         except Exception as e:
-            print(f"Error inserting document: {e}")
+            logger.error(f"Error inserting description: {e}", exc_info=True)
             return None
+
+    def upsert_screen(self, workflow_id: str, state_id: str, screen_json: Dict[str, Any]) -> str:
+        """Upsert JSON экрана по уникальной паре (workflow_id, state_id).
+        Создаёт уникальный индекс при первом вызове.
+        Returns _id документа.
+        """
+        if self.collection.name != settings.SCREENS_MONGO_COLLECTION:
+            raise ValueError("MongoDBClient: неверная коллекция для upsert_screen")
+        # Гарантируем уникальный индекс
+        try:
+            self.collection.create_index(
+                [("workflow_id", ASCENDING), ("state_id", ASCENDING)],
+                name="uniq_workflow_state",
+                unique=True,
+            )
+        except pymongo.errors.PyMongoError:
+            pass
+        filter_ = {"workflow_id": workflow_id, "state_id": state_id}
+        update_doc = {"$set": {"workflow_id": workflow_id, "state_id": state_id, "screen": screen_json}}
+        result = self.collection.update_one(filter_, update_doc, upsert=True)
+        if result.upserted_id:
+            return str(result.upserted_id)
+        existing = self.collection.find_one(filter_, {"_id": 1})
+        return str(existing["_id"]) if existing else ""
+
+    def get_screen_by_keys(self, workflow_id: str, state_id: str) -> Optional[Dict[str, Any]]:
+        """Получить документ экрана по (workflow_id, state_id)."""
+        if self.collection.name != settings.SCREENS_MONGO_COLLECTION:
+            raise ValueError("MongoDBClient: неверная коллекция для get_screen_by_keys")
+        doc = self.collection.find_one({"workflow_id": workflow_id, "state_id": state_id})
+        if not doc:
+            return None
+        doc = dict(doc)
+        doc["_id"] = str(doc["_id"])
+        return doc
 
     def __del__(self):
         """Закрывает соединение с MongoDB при удалении объекта"""
@@ -120,5 +173,5 @@ def get_mongo_client():
     Создает и возвращает MongoDBClient как зависимость.
     Автоматически закрывает соединение после использования.
     """
-    mongo_client = MongoDBClient(database="lct_efs", collection="states")
+    mongo_client = MongoDBClient(database=settings.MONGO_DB, collection="states")
     return mongo_client

@@ -12,10 +12,6 @@ from workflow_builder.transitions import Transition
 from config import settings
 
 
-if TYPE_CHECKING:
-    from workflow_builder.states import WorkflowState
-
-
 logger = logging.getLogger(__name__)
 
 

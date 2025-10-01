@@ -81,6 +81,13 @@ def call_deadlock_protection(start_time):
     if (time.time() - start_time) > settings.DEADLOCK_TIMEOUT:
         raise Exception("Deadlock detected. Aborting.")
 
+
+def generate_screen_id(original_oid: ObjectId, unique_string: str) -> ObjectId:
+    combined = str(original_oid) + unique_string
+    hash_hex = hashlib.md5(combined.encode()).hexdigest()  # or sha256
+    return ObjectId(hash_hex[:24])
+
+
 def prepare_context_response(context: dict):
     if isinstance(context, (bytes, bytearray)):
         context = context.decode()

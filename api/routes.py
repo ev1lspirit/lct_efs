@@ -8,6 +8,7 @@ from storage.redis.service import RedisCache, get_redis_cache
 from workflow_builder.automaton.automaton import Automaton
 from workflow_builder.state_parser.contract import StateSet
 from config import settings
+from workflow_builder.models import StateTypeEnum
 
 router = APIRouter()
 
@@ -22,52 +23,6 @@ class WorkflowRequest(BaseModel):
 class SaveWorkflowRequest(BaseModel):
     states: StateSet
     predefined_context: dict[str, Any] = {}
-
-
-# @router.post("/workflow/save")
-# async def save_workflow(
-#     body: SaveWorkflowRequest,
-#     mongo_client: Callable = Depends(get_mongo_client_as_dependency),
-# ):
-#     """
-#     Сохраняет StateModel в MongoDB.
-#     Args:
-#         state: Экземпляр StateModel с данными состояния
-#     Returns:
-#         dict: Ответ с ID сохраненного документа
-#     Raises:
-#         HTTPException: Если сохранение не удалось
-#     """
-#     try:
-#         states_mongo_client: MongoDBClient = mongo_client(collection=settings.STATES_MONGO_COLLECTION)
-#         workflow_context_client: MongoDBClient = mongo_client(collection=settings.WORKFLOW_MONGO_COLLECTION)
-#         # Преобразуем Pydantic модель в словарь для сохранения в MongoDB
-#         state_list = [state.model_dump() for state in body.states.states]
-#         state_dict = {"states": state_list}
-#         # Сохраняем документ в MongoDB
-#         inserted_workflow_id = states_mongo_client.insert_description(state_dict)
-#         if inserted_workflow_id is None:
-#             raise HTTPException(status_code=500, detail="Failed to save state to MongoDB")
-
-#         wf_context_id = workflow_context_client.insert_description(
-#             body.predefined_context, overriden_id=inserted_workflow_id
-#         )
-#         if wf_context_id is None:
-#             raise HTTPException(status_code=500, detail="Failed to save workflow context to MongoDB")
-
-#         logger.info(f"State successfully saved with ID: {inserted_workflow_id}")
-#         if inserted_workflow_id:
-#             return {
-#                 "status": "success",
-#                 "wf_description_id": inserted_workflow_id,
-#                 "wf_context_id": wf_context_id,
-#             }
-#         else:
-#             raise HTTPException(
-#                 status_code=500, detail="Failed to save state to MongoDB"
-#             )
-#     except Exception as e:
-#         raise HTTPException(status_code=500, detail=f"Error saving state: {str(e)}")
 
 
 @router.post("/workflow/save")
@@ -96,20 +51,31 @@ async def save_workflow(
         workflow_context_client = mongo_client(
             collection=settings.WORKFLOW_MONGO_COLLECTION
         )
+        screens_client = mongo_client(collection=settings.SCREENS_MONGO_COLLECTION)
         # Validate input data
         _validate_save_workflow_request(body)
         workflow_id = await _save_workflow_states(body, states_client)
+        # Сохраняем экраны после получения workflow_id
+        saved_screens = 0
+        for state in body.states.states:
+            if state.state_type == StateTypeEnum.screen.value and state.screen:
+                try:
+                    screens_client.upsert_screen(workflow_id, state.name, state.screen)
+                    saved_screens += 1
+                except Exception as e:
+                    logger.error(f"Failed to save screen for state {state.name}: {e}")
         context_id = await _save_workflow_context(
             body, workflow_context_client, workflow_id
         )
         logger.info(
             f"Workflow successfully saved. Workflow ID: {workflow_id}, "
-            f"Context ID: {context_id}"
+            f"Context ID: {context_id}, Screens saved: {saved_screens}"
         )
         return {
             "status": "success",
             "wf_description_id": workflow_id,
             "wf_context_id": context_id,
+            "screens_saved": saved_screens,
         }
     except HTTPException:
         # Re-raise known HTTP exceptions
@@ -144,14 +110,22 @@ async def check_session(
 
     try:
         session_context = await _get_or_create_session(body, redis_cache)
-        await _execute_workflow_automaton(body)
+        automaton = Automaton(
+            session_id=body.client_session_id, workflow_id=body.client_workflow_id
+        )
+        screen_payload = automaton.run(body.event_name)
         logger.info(
             f"Successfully processed workflow for session: {body.client_session_id}"
         )
-        return {
+        response: dict[str, Any] = {
             "session_id": body.client_session_id,
             "context": session_context,
+            "current_state": automaton.current_state.name,
+            "state_type": automaton.current_state.type_.value,
         }
+        if screen_payload is not None:
+            response["screen"] = screen_payload
+        return response
     except HTTPException:
         # Re-raise HTTP exceptions to avoid masking client errors
         raise
@@ -346,38 +320,3 @@ def _create_new_session(
 
     return session_context
 
-
-async def _execute_workflow_automaton(
-    body: WorkflowRequest
-) -> None:
-    """
-    Execute workflow automaton with error handling
-
-    Args:
-        body: WorkflowRequest containing execution parameters
-        session_context: Current session context
-
-    Raises:
-        HTTPException: If automaton execution fails
-    """
-    try:
-        logger.info(
-            f"Executing automaton for workflow: {body.client_workflow_id}, "
-            f"event: {body.event_name}"
-        )
-
-        automaton = Automaton(
-            session_id=body.client_session_id, workflow_id=body.client_workflow_id
-        )
-        automaton.run(body.event_name)
-        logger.debug("Automaton execution completed successfully")
-
-    except Exception as e:
-        logger.error(
-            f"Automaton execution failed for session {body.client_session_id}. "
-            f"Error: {str(e)}",
-            exc_info=True,
-        )
-        raise HTTPException(
-            status_code=500, detail=f"Workflow execution failed: {str(e)}"
-        )
