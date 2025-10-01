@@ -42,7 +42,7 @@ class SessionContext:
             raise e
 
     def update_session_state(self, data: StateMetadata):
-        logger.info("Updating session state: %s with data: %s", self._session_id)
+        logger.info(f"Updating session state: {self._session_id} with data: ")
         try:
             self._redis_cache.save_state(self._session_id, data.model_dump())
         except Exception as e:
@@ -58,7 +58,9 @@ class SessionContext:
 
     def update_session(self):
         if hasattr(self, "_session") and self._session is not None:
-            logger.info("Updating session: %s with data: %s", self._session_id, json.dumps(self._session))
+            logger.info(
+                f"Updating session: {self._session_id} with data: {json.dumps(self._session)}"
+            )
             flat_context = {
                 k: json.dumps(v) if isinstance(v, (dict, list)) else v
                 for k, v in self.session.items()

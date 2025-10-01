@@ -1,9 +1,12 @@
+import base64
 from functools import wraps
+import hashlib
 import json
 from config import settings
 import time
 from typing import Any, Optional, Type
 import logging
+from bson.objectid import ObjectId
 
 
 def setup_logging():
@@ -77,6 +80,12 @@ def execute_safe(default_return=None, service_name: Optional[str] = None):
 def call_deadlock_protection(start_time):
     if (time.time() - start_time) > settings.DEADLOCK_TIMEOUT:
         raise Exception("Deadlock detected. Aborting.")
+
+
+def generate_screen_id(original_oid: ObjectId, unique_string: str) -> ObjectId:
+    combined = str(original_oid) + unique_string
+    hash_hex = hashlib.md5(combined.encode()).hexdigest()  # or sha256
+    return ObjectId(hash_hex[:24])
 
 
 def prepare_context_response(context: dict):

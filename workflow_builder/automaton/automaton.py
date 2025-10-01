@@ -199,7 +199,7 @@ class Automaton:
                 if on_return:
                     # returns screen data
                     self._call_state_checkpoint()
-                    return
+                    return 
                 on_return = not on_return
                 candidate = self._get_transition_candidates_based_on_event(
                     current_state=self.current_state, event_name=event_name
