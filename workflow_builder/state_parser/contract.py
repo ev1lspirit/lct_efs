@@ -36,6 +36,7 @@ class EventModel(BaseModel):
 class StateModel(BaseModel):
     state_type: Literal["technical", "integration", "screen", "service"]
     name: str
+    screen: dict = {}
     transitions: list[TransitionModel] = []
     expressions: list[
         Union[
