@@ -4,6 +4,7 @@ import uuid
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
 from fastapi.testclient import TestClient
+from starlette.middleware.cors import CORSMiddleware
 
 from api.testWorkflow import test_workflow_1_simple_login
 from storage.postgres.crud import workflow
@@ -18,6 +19,16 @@ async def lifespan(app: FastAPI):
 
 setup_logging()
 app = FastAPI(lifespan=lifespan)
+
+# Настройка CORS для веб-части
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # В продакшене указать конкретные домены
+    allow_credentials=True,
+    allow_methods=["*"],  # Разрешить все HTTP методы (GET, POST, OPTIONS и т.д.)
+    allow_headers=["*"],  # Разрешить все заголовки
+)
+
 app.include_router(router)
 
 
