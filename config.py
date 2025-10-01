@@ -39,6 +39,7 @@ class Settings:
     SERVICE_ERROR_STATE = "__service_error"
     WORKFLOW_MONGO_COLLECTION = "workflow_context"
     STATES_MONGO_COLLECTION = "states"
+    SCREENS_MONGO_COLLECTION = "screens"
 
     DEADLOCK_TIMEOUT = 30
 

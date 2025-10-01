@@ -4,7 +4,6 @@ from operator import attrgetter
 import time
 from typing import TYPE_CHECKING, Optional
 from context import SessionContext
-from utils import call_deadlock_protection
 from workflow_builder.automaton.models import StateMetadata
 from workflow_builder.expressions import Expression
 from workflow_builder.models import StateTypeEnum
@@ -12,6 +11,7 @@ from workflow_builder.state_parser.contract import STATE_CLASSES, StateModel
 from workflow_builder.state_parser.parser import GlobalStateParser
 from workflow_builder.transitions import Transition
 from config import settings
+from storage.mongo.client import MongoDBClient
 
 if TYPE_CHECKING:
     from ..states import WorkflowState
@@ -199,13 +199,30 @@ class Automaton:
                 if on_return:
                     # returns screen data
                     self._call_state_checkpoint()
-                    return 
+                    try:
+                        screens_client = MongoDBClient(
+                            database=settings.MONGO_DB,
+                            collection=settings.SCREENS_MONGO_COLLECTION,
+                        )
+                        screen_doc = screens_client.get_screen_by_keys(
+                            self._workflow_id, self.current_state.name
+                        )
+                        if screen_doc:
+                            return screen_doc.get("screen")
+                        logger.warning(
+                            f"Screen JSON not found for workflow={self._workflow_id}, state={self.current_state.name}"
+                        )
+                        return None
+                    except Exception as e:
+                        logger.error(
+                            f"Failed to retrieve screen for wf={self._workflow_id}, state={self.current_state.name}: {e}"
+                        )
+                        return None
                 on_return = not on_return
                 candidate = self._get_transition_candidates_based_on_event(
                     current_state=self.current_state, event_name=event_name
                 )
             else:
-                # call_deadlock_protection(start_time)
                 evaluator = (
                     self._evaluate_service_executables
                     if self.current_state.type_ == StateTypeEnum.service

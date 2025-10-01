@@ -1,6 +1,5 @@
 from functools import partial
-from pprint import pprint
-from pymongo import MongoClient
+from pymongo import MongoClient, ASCENDING
 from bson.objectid import ObjectId
 from typing import Optional, Dict, Any
 
@@ -19,7 +18,7 @@ class MongoDBClient:
         try:
             document = self.collection.find_one({"_id": ObjectId(id)})
             if document:
-                # Преобразуем ObjectId в строку для JSON-сериализации
+                document = dict(document)  # ensure mutable copy
                 document["_id"] = str(document["_id"])
             return document
         except Exception as e:
@@ -49,7 +48,7 @@ class MongoDBClient:
         try:
             document = self.collection.find_one({"_id": ObjectId(description_id)})
             if document:
-                # Преобразуем ObjectId в строку для JSON-сериализации
+                document = dict(document)
                 document["_id"] = str(document["_id"])
             return document
         except Exception as e:
@@ -95,6 +94,41 @@ class MongoDBClient:
         except Exception as e:
             print(f"Error inserting document: {e}")
             return None
+
+    def upsert_screen(self, workflow_id: str, state_id: str, screen_json: Dict[str, Any]) -> str:
+        """Upsert JSON экрана по уникальной паре (workflow_id, state_id).
+        Создаёт уникальный индекс при первом вызове.
+        Returns _id документа.
+        """
+        if self.collection.name != settings.SCREENS_MONGO_COLLECTION:
+            raise ValueError("MongoDBClient: неверная коллекция для upsert_screen")
+        # Гарантируем уникальный индекс
+        try:
+            self.collection.create_index(
+                [("workflow_id", ASCENDING), ("state_id", ASCENDING)],
+                name="uniq_workflow_state",
+                unique=True,
+            )
+        except pymongo.errors.PyMongoError:
+            pass
+        filter_ = {"workflow_id": workflow_id, "state_id": state_id}
+        update_doc = {"$set": {"workflow_id": workflow_id, "state_id": state_id, "screen": screen_json}}
+        result = self.collection.update_one(filter_, update_doc, upsert=True)
+        if result.upserted_id:
+            return str(result.upserted_id)
+        existing = self.collection.find_one(filter_, {"_id": 1})
+        return str(existing["_id"]) if existing else ""
+
+    def get_screen_by_keys(self, workflow_id: str, state_id: str) -> Optional[Dict[str, Any]]:
+        """Получить документ экрана по (workflow_id, state_id)."""
+        if self.collection.name != settings.SCREENS_MONGO_COLLECTION:
+            raise ValueError("MongoDBClient: неверная коллекция для get_screen_by_keys")
+        doc = self.collection.find_one({"workflow_id": workflow_id, "state_id": state_id})
+        if not doc:
+            return None
+        doc = dict(doc)
+        doc["_id"] = str(doc["_id"])
+        return doc
 
     def __del__(self):
         """Закрывает соединение с MongoDB при удалении объекта"""
