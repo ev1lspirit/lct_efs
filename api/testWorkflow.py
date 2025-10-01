@@ -16,6 +16,18 @@ if __name__ == "__main__":
     # uvicorn.run("app:app", host="127.0.0.1", port=8000, reload=True)
     test_client = TestClient(app)
 
+    def test_user_session():
+        client_session_id = "1234567890"
+        workflow_id = "68d976ced58d8162a65994f3"
+        response = test_client.post(
+            "/client/workflow",
+            json={
+                "client_session_id": client_session_id,
+                "client_workflow_id": workflow_id,
+            },
+        )
+        assert response.status_code == 200
+
     def test_workflow():
         test_json = {
             "states": [
@@ -48,7 +60,11 @@ if __name__ == "__main__":
                     "state_type": "integration",
                     "name": "FetchData",
                     "transitions": [
-                        {"variable": "data_fetched", "case": None, "state_id": "ProcessData"},
+                        {
+                            "variable": "data_fetched",
+                            "case": None,
+                            "state_id": "ProcessData",
+                        },
                     ],
                     "expressions": [
                         {
@@ -59,7 +75,7 @@ if __name__ == "__main__":
                         }
                     ],
                     "initial_state": False,
-                    "final_state": False
+                    "final_state": False,
                 },
                 {
                     "state_type": "technical",
@@ -142,27 +158,7 @@ if __name__ == "__main__":
                 },
             ]
         }
-
-        automaton = Automaton(session_id="1234567890", workflow_id="68da5935428adff22feedeab")
-        automaton.run()
-
-        response = test_client.post("/workflow/save", json=testWorkflow.test_workflow_1_simple_login())
-        assert response.status_code == 200
-
-    def test_user_session():
-        client_session_id = "1234567890"
-        workflow_id = "68d976ced58d8162a65994f3"
-        response = test_client.post(
-            "/client/workflow",
-            json={
-                "client_session_id": client_session_id,
-                "client_workflow_id": workflow_id,
-            },
-        )
-        assert response.status_code == 200
-
-    test_workflow()
-    #test_user_session()
+        return test_json
 
 def test_workflow_1_simple_login():
     """Простой workflow авторизации пользователя"""
