@@ -44,3 +44,5 @@ Thumbs.db
 # Local configs
 *.env
 .env.*
+
+.github/copilot-instructions.md

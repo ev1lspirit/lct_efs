@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from enum import StrEnum
+from enum import Enum
 from functools import wraps
 import inspect
 from urllib.parse import urlparse
@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 HandlerClass = TypeVar("HandlerClass")
 
 
-class BehaviourTypeEnum(StrEnum):
+class BehaviourTypeEnum(str, Enum):
     init = "init"
     error = "error"
 

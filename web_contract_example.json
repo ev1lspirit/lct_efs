@@ -1,0 +1,96 @@
+{
+  "states": {
+    "states": [
+      {
+        "state_type": "service",
+        "name": "__init__",
+        "initial_state": true,
+        "final_state": false,
+        "expressions": [],
+        "transitions": [
+          {
+            "state_id": "calculate",
+            "case": null
+          }
+        ]
+      },
+      {
+        "state_type": "technical",
+        "name": "calculate",
+        "initial_state": false,
+        "final_state": false,
+        "expressions": [
+          {
+            "variable": "total",
+            "dependent_variables": ["price", "quantity"],
+            "expression": "price * quantity"
+          }
+        ],
+        "transitions": [
+          {
+            "state_id": "check_discount",
+            "case": null
+          }
+        ]
+      },
+      {
+        "state_type": "technical",
+        "name": "check_discount",
+        "initial_state": false,
+        "final_state": false,
+        "expressions": [
+          {
+            "variable": "discount",
+            "dependent_variables": ["total"],
+            "expression": "0.1 if total > 1000 else 0"
+          }
+        ],
+        "transitions": [
+          {
+            "state_id": "api_call",
+            "case": null
+          }
+        ]
+      },
+      {
+        "state_type": "integration",
+        "name": "api_call",
+        "initial_state": false,
+        "final_state": false,
+        "expressions": [
+          {
+            "variable": "order_result",
+            "url": "https://api.example.com/orders",
+            "params": {
+              "total": "{{total}}",
+              "discount": "{{discount}}"
+            },
+            "method": "post"
+          }
+        ],
+        "transitions": [
+          {
+            "state_id": "show_result",
+            "case": null
+          }
+        ]
+      },
+      {
+        "state_type": "screen",
+        "name": "show_result",
+        "initial_state": false,
+        "final_state": true,
+        "expressions": [
+          {
+            "event_name": "close"
+          }
+        ],
+        "transitions": []
+      }
+    ]
+  },
+  "predefined_context": {
+    "price": 150,
+    "quantity": 8
+  }
+}

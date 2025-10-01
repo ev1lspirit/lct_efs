@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi.testclient import TestClient
 
 from workflow_builder.automaton.automaton import Automaton
-from .routes import router
+from api.routes import router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

@@ -1,7 +1,11 @@
 import json
 import os
 import uuid
-from fastapi import FastAPI
+import logging
+from fastapi import FastAPI, Request, status
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 from fastapi.testclient import TestClient
 
@@ -9,8 +13,10 @@ from api.testWorkflow import test_workflow_1_simple_login
 from storage.postgres.crud import workflow
 from utils import setup_logging
 from workflow_builder.automaton.automaton import Automaton
-from .routes import router
+from api.routes import router
 import uvicorn
+
+logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -18,6 +24,46 @@ async def lifespan(app: FastAPI):
 
 setup_logging()
 app = FastAPI(lifespan=lifespan)
+
+# Глобальный обработчик ошибок валидации
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    logger.error(f"❌ Validation Error on {request.method} {request.url.path}")
+    logger.error(f"📍 Client: {request.client.host}")
+    
+    # Получаем raw body для отладки
+    try:
+        body = await request.body()
+        logger.error(f"📋 Request body: {body.decode('utf-8')[:1000]}...")
+    except:
+        logger.error(f"📋 Could not read request body")
+    
+    # Детальное логирование каждой ошибки
+    for error in exc.errors():
+        logger.error(f"  ❗ Location: {' -> '.join(str(loc) for loc in error['loc'])}")
+        logger.error(f"     Type: {error['type']}")
+        logger.error(f"     Message: {error['msg']}")
+        if 'input' in error:
+            logger.error(f"     Input: {error['input']}")
+    
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content={
+            "detail": exc.errors(),
+            "body": exc.body,
+            "message": "Validation error - check server logs for details"
+        },
+    )
+
+# Настройка CORS для веб-части
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # В продакшене указать конкретные домены
+    allow_credentials=True,
+    allow_methods=["*"],  # Разрешить все HTTP методы (GET, POST, OPTIONS и т.д.)
+    allow_headers=["*"],  # Разрешить все заголовки
+)
+
 app.include_router(router)
 
 
