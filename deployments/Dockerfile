@@ -12,7 +12,7 @@ COPY api /app/api
 COPY database /app/database
 COPY diagrams /app/diagrams
 COPY fsm /app/fsm
-COPY Scripts /app/Scripts
+#COPY Scripts /app/Scripts
 COPY storage /app/storage
 COPY workflow_builder /app/workflow_builder
 
