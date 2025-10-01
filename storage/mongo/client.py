@@ -120,5 +120,5 @@ def get_mongo_client():
     Создает и возвращает MongoDBClient как зависимость.
     Автоматически закрывает соединение после использования.
     """
-    mongo_client = MongoDBClient(database="lct_efs", collection="states")
+    mongo_client = MongoDBClient(database=settings.MONGO_DB, collection="states")
     return mongo_client

@@ -3,7 +3,7 @@ import logging
 import uuid
 import redis
 from config import settings
-from utils import GeneralPurposeSingletonMeta, execute_safe, prepare_context_response
+from utils import GeneralPurposeSingletonMeta, dump_context, execute_safe, prepare_context_response
 
 
 logger = logging.getLogger(__name__)
@@ -21,8 +21,9 @@ class RedisCache(metaclass=GeneralPurposeSingletonMeta):
 
     def set_workflow_context(self, session_id: str, context: dict):
         redis_key = self.get_wf_context_key(session_id)
+
         try:
-            self.r.hset(redis_key, mapping=context)
+            self.r.hset(redis_key, mapping=dump_context(context))
         except Exception as exc:
             logger.error("Error: ")
             raise exc
@@ -66,7 +67,7 @@ class RedisCache(metaclass=GeneralPurposeSingletonMeta):
     def update_session(self, session_id: str, data: dict, ttl: int = 3600):
         key = self.get_session_key(session_id)
         if data:
-            self.r.hset(key, mapping=data)
+            self.r.hset(key, mapping=dump_context(data))
 
     def delete_session(self, session_id: str):
         self.r.delete(self.get_session_key(session_id))
