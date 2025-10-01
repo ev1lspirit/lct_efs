@@ -1,0 +1,198 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "LCT EFS Workflow Definition",
+  "description": "JSON Schema for validating workflow definitions in LCT EFS system",
+  "type": "object",
+  "required": ["states", "predefined_context"],
+  "properties": {
+    "states": {
+      "type": "object",
+      "required": ["states"],
+      "properties": {
+        "states": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/definitions/StateModel"
+          }
+        }
+      }
+    },
+    "predefined_context": {
+      "type": "object",
+      "description": "Initial context variables for the workflow",
+      "additionalProperties": true
+    }
+  },
+  "definitions": {
+    "StateModel": {
+      "type": "object",
+      "required": ["state_type", "name", "transitions", "expressions", "initial_state", "final_state"],
+      "properties": {
+        "state_type": {
+          "type": "string",
+          "enum": ["technical", "integration", "screen", "service"],
+          "description": "Type of the state"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-zA-Z0-9_]+$",
+          "description": "Unique name of the state (alphanumeric and underscore only)"
+        },
+        "initial_state": {
+          "type": "boolean",
+          "description": "Whether this is the initial state (exactly one must be true)"
+        },
+        "final_state": {
+          "type": "boolean",
+          "description": "Whether this is a final state (at least one must be true)"
+        },
+        "transitions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/TransitionModel"
+          },
+          "description": "List of possible transitions from this state"
+        },
+        "expressions": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {"$ref": "#/definitions/TechnicalExpressionModel"},
+              {"$ref": "#/definitions/IntegrationExpressionModel"},
+              {"$ref": "#/definitions/EventModel"}
+            ]
+          },
+          "description": "List of expressions to evaluate in this state"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "state_type": {"const": "integration"}
+            }
+          },
+          "then": {
+            "properties": {
+              "transitions": {
+                "minItems": 1,
+                "maxItems": 1,
+                "items": {
+                  "properties": {
+                    "case": {"type": "null"}
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "state_type": {"const": "service"}
+            }
+          },
+          "then": {
+            "properties": {
+              "expressions": {
+                "maxItems": 0
+              }
+            }
+          }
+        }
+      ]
+    },
+    "TransitionModel": {
+      "type": "object",
+      "required": ["state_id"],
+      "properties": {
+        "state_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Name of the target state"
+        },
+        "case": {
+          "type": ["string", "null"],
+          "description": "Condition for this transition (Python expression or null for default)"
+        },
+        "variable": {
+          "oneOf": [
+            {"type": "string"},
+            {
+              "type": "array",
+              "items": {"type": "string"}
+            },
+            {"type": "null"}
+          ],
+          "description": "Variable(s) to check for transition (string for technical, array for screen)"
+        }
+      }
+    },
+    "TechnicalExpressionModel": {
+      "type": "object",
+      "required": ["variable", "dependent_variables", "expression"],
+      "properties": {
+        "variable": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Variable name to store the result"
+        },
+        "dependent_variables": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "List of context variables required for this expression"
+        },
+        "expression": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Python expression to evaluate"
+        }
+      },
+      "additionalProperties": false
+    },
+    "IntegrationExpressionModel": {
+      "type": "object",
+      "required": ["variable", "url", "method", "params"],
+      "properties": {
+        "variable": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Variable name to store the API response"
+        },
+        "url": {
+          "type": "string",
+          "format": "uri",
+          "description": "Full URL for the API call (supports {{variable}} templates)"
+        },
+        "method": {
+          "type": "string",
+          "enum": ["get", "post", "put", "delete", "patch"],
+          "description": "HTTP method"
+        },
+        "params": {
+          "type": "object",
+          "description": "Request parameters (query params for GET, body for POST/PUT/PATCH)",
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "EventModel": {
+      "type": "object",
+      "required": ["event_name"],
+      "properties": {
+        "event_name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Name of the event to match (for Screen states)"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

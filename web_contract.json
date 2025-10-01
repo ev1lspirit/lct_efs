@@ -1,0 +1,44 @@
+{
+  "states": [
+    {
+      "state_type": "service",
+      "name": "__init__",
+      "initial_state": "true",
+      "final_state": "false",
+      "expressions": [],
+      "transitions": [{"state_id": "calc"}]
+    },
+    {
+      "state_type": "technical",
+      "name": "calc",
+      "initial_state": "false",
+      "final_state": "true",
+      "expressions": [
+        {
+          "variable": "result",
+          "expression": "x * 2"
+        }
+      ],
+      "transitions": []
+    },
+    {
+      "state_type": "integration",
+      "name": "api",
+      "initial_state": "true",
+      "final_state": "false",
+      "expressions": [
+        {
+          "variable": "data",
+          "url": "https://api.example.com",
+          "params": {},
+          "method": "get"
+        }
+      ],
+      "transitions": [
+        {"state_id": "success", "case": "data.ok"},
+        {"state_id": "error", "case": "!data.ok"}
+      ]
+    }
+  ],
+  "predefined_context": {}
+}
