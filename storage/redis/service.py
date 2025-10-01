@@ -53,7 +53,7 @@ class RedisCache(metaclass=GeneralPurposeSingletonMeta):
         self.r.hset(key, mapping=data)  # сохраняем как hash
         return session_id
 
-    def get_session(self, session_id: str) -> dict | None:
+    def get_session(self, session_id: str) -> dict:
         """
         Возвращает сессию по ее идентификатору.
 

@@ -28,175 +28,34 @@ async def healthcheck():
 if __name__ == "__main__":
     # uvicorn.run("app:app", host="127.0.0.1", port=8000, reload=True)
     test_client = TestClient(app)
+    global_session_id = str(uuid.uuid4())
 
-    def test_workflow():
-        test_json = {
-            "states": [
-                {
-                    "state_type": "technical",
-                    "name": "Init",
-                    "transitions": [
-                        {
-                            "variable": "data_loaded",
-                            "case": "True",
-                            "state_id": "FetchData",
-                        },
-                        {
-                            "variable": "data_loaded",
-                            "case": "False",
-                            "state_id": "ErrorState",
-                        },
-                    ],
-                    "expressions": [
-                        {
-                            "variable": "data_loaded",
-                            "dependent_variables": [],
-                            "expression": "True",
-                        }
-                    ],
-                    "initial_state": True,
-                    "final_state": False,
-                },
-                {
-                    "state_type": "integration",
-                    "name": "FetchData",
-                    "transitions": [
-                        {"variable": "data_fetched", "case": None, "state_id": "ProcessData"},
-                    ],
-                    "expressions": [
-                        {
-                            "variable": "data_fetched",
-                            "url": "http://localhost:8080",
-                            "params": {},
-                            "method": "get",
-                        }
-                    ],
-                    "initial_state": False,
-                    "final_state": False
-                },
-                {
-                    "state_type": "technical",
-                    "name": "ProcessData",
-                    "transitions": [
-                        {
-                            "variable": "is_type_a",
-                            "case": "True",
-                            "state_id": "ShowScreenA",
-                        },
-                        {
-                            "variable": "is_type_b",
-                            "case": "True",
-                            "state_id": "ShowScreenB",
-                        },
-                        {
-                            "variable": ["is_type_a", "is_type_b"],
-                            "case": "False",
-                            "state_id": "ErrorState",
-                        },
-                    ],
-                    "expressions": [
-                        {
-                            "variable": "is_type_a",
-                            "dependent_variables": ["records"],
-                            "expression": "records['type'] == 'A'",
-                        },
-                        {
-                            "variable": "is_type_b",
-                            "dependent_variables": ["records"],
-                            "expression": "records['type'] == 'B'",
-                        },
-                    ],
-                    "initial_state": False,
-                    "final_state": False,
-                },
-                {
-                    "state_type": "screen",
-                    "name": "ShowScreenA",
-                    "transitions": [
-                        {"case": "continue", "state_id": "Final"},
-                        {"case": "back", "state_id": "ProcessData"},
-                    ],
-                    "expressions": [
-                        {"event_name": "continue"},
-                        {"event_name": "back"},
-                    ],
-                    "initial_state": False,
-                    "final_state": False,
-                },
-                {
-                    "state_type": "screen",
-                    "name": "ShowScreenB",
-                    "transitions": [
-                        {"case": "continue", "state_id": "Final"},
-                        {"case": "back", "state_id": "ProcessData"},
-                    ],
-                    "expressions": [
-                        {"event_name": "continue"},
-                        {"event_name": "back"},
-                    ],
-                    "initial_state": False,
-                    "final_state": False,
-                },
-                {
-                    "state_type": "technical",
-                    "name": "Final",
-                    "transitions": [],
-                    "expressions": [],
-                    "initial_state": False,
-                    "final_state": True,
-                },
-                {
-                    "state_type": "technical",
-                    "name": "ErrorState",
-                    "transitions": [],
-                    "expressions": [],
-                    "initial_state": False,
-                    "final_state": True,
-                },
-            ]
+    def save_workflow_and_test_events():
+        body = {
+            "states": test_workflow_1_simple_login()
         }
-        # import timeit
-        # import psutil
+        response = test_client.post("/workflow/save", json=body)
+        assert response.status_code == 200
+        resp_json = response.json()
 
-        # start_time = timeit.default_timer()
-        # process = psutil.Process(os.getpid())
-        # start_memory = process.memory_info().rss / 1024
-        # automaton = Automaton(session_id="12345678901", workflow_id="68da5935428adff22feedeab")
-        # end_memory = process.memory_info().rss / 1024
-        # end_time = timeit.default_timer()
-        # memory_usage = end_memory - start_memory
-
-        # creation_time = end_time - start_time
-        # print(f"Creation of Automaton took {creation_time:.2f} seconds")
-        # print(f"Creation of Automaton used {memory_usage:.2f} KB of memory")
-        # automaton.run()
-
-        global_session_id = str(uuid.uuid4())
-
-        def save_workflow_and_test_events():
-            body = {
-                "states": test_workflow_1_simple_login(),
-                "predefined_context": {"username": "abc112", "password": "12345678910"}
-            }
-            response = test_client.post("/workflow/save", json=body)
-            assert response.status_code == 200
-            resp_json = response.json()
-
-            events = [None, "submit", "logout"]
-            for event in events:
-                if event == "logout":
-                    print()
-                response = test_client.post(
-                    "/client/workflow",
-                    json={
+        events = {
+            None: {},
+            "submit": {"username": "abc112", "password": "12345678910"},
+            "logout": {}
+        }
+        for event in events:
+            response = test_client.post(
+                "/client/workflow",
+                json={
                     "client_session_id": global_session_id,
                     "client_workflow_id": resp_json["wf_description_id"],
                     "event_name": event,
-                    },
-                )
-            assert response.status_code == 200
+                    "context": events[event],
+                },
+            )
+        assert response.status_code == 200
 
-        save_workflow_and_test_events()
+    save_workflow_and_test_events()
 
     def test_user_session():
         client_session_id = "1234567890"
@@ -210,5 +69,4 @@ if __name__ == "__main__":
         )
         assert response.status_code == 200
 
-    test_workflow()
     # test_user_session()

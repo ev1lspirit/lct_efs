@@ -115,7 +115,6 @@ def get_mongo_client_as_dependency():
     yield mongo_client
 
 
-
 def get_mongo_client():
     """
     Создает и возвращает MongoDBClient как зависимость.
@@ -123,4 +122,3 @@ def get_mongo_client():
     """
     mongo_client = MongoDBClient(database="lct_efs", collection="states")
     return mongo_client
-

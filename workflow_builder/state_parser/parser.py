@@ -1,13 +1,13 @@
 from collections import deque
-from functools import partial, reduce
+from functools import reduce
 import operator
 
 from workflow_builder.expressions import BaseStateExpression, Expression
-from typing import TYPE_CHECKING, Dict, Any
+from typing import TYPE_CHECKING
 import logging
 from workflow_builder.models import StateTypeEnum
 from .workflow_cache import workflow_cache
-from .contract import STATE_CLASSES, StateModel
+from .contract import StateModel
 from workflow_builder.transitions import Transition
 from config import settings
 
@@ -62,10 +62,6 @@ class GlobalStateParser:
                     queue.append(next_state)
                     processed.add(next_state.name)
         return states_to_include
-
-    def parse_states(self):
-        for state in self.data:
-            yield self.build_state(state)
 
     def _load_workflow(self) -> list[StateModel]:
         states: list[StateModel] = workflow_cache.get_workflow(self.workflow_id)
