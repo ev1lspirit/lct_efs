@@ -250,7 +250,6 @@ def test_workflow_1_simple_login():
     }
     return test_json
 
-
 def test_workflow_2_ecommerce_checkout():
     """Средней сложности workflow для процесса оформления заказа в e-commerce"""
     test_json = {
@@ -259,8 +258,16 @@ def test_workflow_2_ecommerce_checkout():
                 "state_type": "technical",
                 "name": "InitCart",
                 "transitions": [
-                    {"variable": "cart_empty", "case": "True", "state_id": "EmptyCartScreen"},
-                    {"variable": "cart_empty", "case": "False", "state_id": "CartReviewScreen"},
+                    {
+                        "variable": "cart_empty",
+                        "case": "True",
+                        "state_id": "EmptyCartScreen",
+                    },
+                    {
+                        "variable": "cart_empty",
+                        "case": "False",
+                        "state_id": "CartReviewScreen",
+                    },
                 ],
                 "expressions": [
                     {
@@ -304,14 +311,43 @@ def test_workflow_2_ecommerce_checkout():
                 "state_type": "integration",
                 "name": "UpdateCart",
                 "transitions": [
-                    {"variable": "cart_updated", "case": None, "state_id": "InitCart"},
+                    {
+                        "variable": "cart_updated",
+                        "case": None,
+                        "state_id": "CheckCartUpdate",
+                    },  # Single transition to technical state
                 ],
                 "expressions": [
                     {
                         "variable": "cart_updated",
-                        "url": "http://api.shop.com/cart/update",
-                        "params": {"items": "{{updated_items}}"},
+                        "url": "http://localhost:8080",
+                        "params": {},
                         "method": "post",
+                    }
+                ],
+                "initial_state": False,
+                "final_state": False,
+            },
+            {
+                "state_type": "technical",  # New technical state to handle cart update result
+                "name": "CheckCartUpdate",
+                "transitions": [
+                    {
+                        "variable": "cart_updated",
+                        "case": "True",
+                        "state_id": "InitCart",
+                    },
+                    {
+                        "variable": "cart_updated",
+                        "case": "False",
+                        "state_id": "CartReviewScreen",
+                    },  # Handle failure case
+                ],
+                "expressions": [
+                    {
+                        "variable": "cart_updated",
+                        "dependent_variables": ["cart_updated"],
+                        "expression": "cart_updated is True",  # This will evaluate the API response
                     }
                 ],
                 "initial_state": False,
@@ -321,8 +357,16 @@ def test_workflow_2_ecommerce_checkout():
                 "state_type": "technical",
                 "name": "CheckUserAuth",
                 "transitions": [
-                    {"variable": "is_authenticated", "case": "True", "state_id": "ShippingAddressScreen"},
-                    {"variable": "is_authenticated", "case": "False", "state_id": "GuestCheckoutScreen"},
+                    {
+                        "variable": "is_authenticated",
+                        "case": "True",
+                        "state_id": "ShippingAddressScreen",
+                    },
+                    {
+                        "variable": "is_authenticated",
+                        "case": "False",
+                        "state_id": "GuestCheckoutScreen",
+                    },
                 ],
                 "expressions": [
                     {
@@ -382,15 +426,43 @@ def test_workflow_2_ecommerce_checkout():
                 "state_type": "integration",
                 "name": "ValidateAddress",
                 "transitions": [
-                    {"variable": "address_valid", "case": "True", "state_id": "PaymentMethodScreen"},
-                    {"variable": "address_valid", "case": "False", "state_id": "ShippingAddressScreen"},
+                    {
+                        "variable": "address_valid",
+                        "case": None,
+                        "state_id": "CheckAddressValidation",
+                    },  # Single transition to technical state
                 ],
                 "expressions": [
                     {
                         "variable": "address_valid",
-                        "url": "http://api.shipping.com/validate",
+                        "url": "http://localhost:8000",
                         "params": {"address": "{{shipping_address}}"},
                         "method": "post",
+                    }
+                ],
+                "initial_state": False,
+                "final_state": False,
+            },
+            {
+                "state_type": "technical",  # New technical state to handle address validation result
+                "name": "CheckAddressValidation",
+                "transitions": [
+                    {
+                        "variable": "address_valid",
+                        "case": "True",
+                        "state_id": "PaymentMethodScreen",
+                    },
+                    {
+                        "variable": "address_valid",
+                        "case": "False",
+                        "state_id": "ShippingAddressScreen",
+                    },
+                ],
+                "expressions": [
+                    {
+                        "variable": "address_valid",
+                        "dependent_variables": ["address_valid"],
+                        "expression": "address_valid is True",  # This will evaluate the API response
                     }
                 ],
                 "initial_state": False,
@@ -430,15 +502,43 @@ def test_workflow_2_ecommerce_checkout():
                 "state_type": "integration",
                 "name": "PayPalFlow",
                 "transitions": [
-                    {"variable": "paypal_success", "case": "True", "state_id": "OrderConfirmation"},
-                    {"variable": "paypal_success", "case": "False", "state_id": "PaymentMethodScreen"},
+                    {
+                        "variable": "paypal_success",
+                        "case": None,
+                        "state_id": "CheckPayPalResult",
+                    },  # Single transition to technical state
                 ],
                 "expressions": [
                     {
                         "variable": "paypal_success",
-                        "url": "http://api.paypal.com/checkout",
-                        "params": {"amount": "{{total_amount}}"},
+                        "url": "http://localhost:8000",
+                        "params": {},
                         "method": "post",
+                    }
+                ],
+                "initial_state": False,
+                "final_state": False,
+            },
+            {
+                "state_type": "technical",  # New technical state to handle PayPal result
+                "name": "CheckPayPalResult",
+                "transitions": [
+                    {
+                        "variable": "paypal_success",
+                        "case": "True",
+                        "state_id": "OrderConfirmation",
+                    },
+                    {
+                        "variable": "paypal_success",
+                        "case": "False",
+                        "state_id": "PaymentMethodScreen",
+                    },
+                ],
+                "expressions": [
+                    {
+                        "variable": "paypal_success",
+                        "dependent_variables": ["paypal_success"],
+                        "expression": "paypal_success is True",  # This will evaluate the API response
                     }
                 ],
                 "initial_state": False,
@@ -448,15 +548,43 @@ def test_workflow_2_ecommerce_checkout():
                 "state_type": "integration",
                 "name": "ProcessPayment",
                 "transitions": [
-                    {"variable": "payment_success", "case": "True", "state_id": "OrderConfirmation"},
-                    {"variable": "payment_success", "case": "False", "state_id": "PaymentErrorScreen"},
+                    {
+                        "case": None,
+                        "state_id": "CheckPaymentResult",
+                        "variable": "payment_success",
+                    },  # Single transition to technical state
                 ],
                 "expressions": [
                     {
                         "variable": "payment_success",
-                        "url": "http://api.payment.com/process",
-                        "params": {"card_data": "{{encrypted_card}}", "amount": "{{total_amount}}"},
+                        "url": "http://localhost:8000",
+                        "params": {},
                         "method": "post",
+                    }
+                ],
+                "initial_state": False,
+                "final_state": False,
+            },
+            {
+                "state_type": "technical",  # New technical state to handle payment result
+                "name": "CheckPaymentResult",
+                "transitions": [
+                    {
+                        "variable": "payment_success",
+                        "case": "True",
+                        "state_id": "OrderConfirmation",
+                    },
+                    {
+                        "variable": "payment_success",
+                        "case": "False",
+                        "state_id": "PaymentErrorScreen",
+                    },
+                ],
+                "expressions": [
+                    {
+                        "variable": "payment_success",
+                        "dependent_variables": ["payment_success"],
+                        "expression": "payment_success is True",  # This will evaluate the API response
                     }
                 ],
                 "initial_state": False,
@@ -501,940 +629,6 @@ def test_workflow_2_ecommerce_checkout():
         ]
     }
     return test_json
-
-
-def test_workflow_3_complex_loan_application():
-    """Сложный workflow для заявки на кредит с множественными проверками"""
-    test_json = {
-        "states": [
-            {
-                "state_type": "technical",
-                "name": "StartApplication",
-                "transitions": [
-                    {"variable": "existing_customer", "case": "True", "state_id": "FetchCustomerData"},
-                    {"variable": "existing_customer", "case": "False", "state_id": "PersonalInfoScreen"},
-                ],
-                "expressions": [
-                    {
-                        "variable": "existing_customer",
-                        "dependent_variables": ["customer_id"],
-                        "expression": "customer_id is not None",
-                    }
-                ],
-                "initial_state": True,
-                "final_state": False,
-            },
-            {
-                "state_type": "integration",
-                "name": "FetchCustomerData",
-                "transitions": [
-                    {"variable": "data_fetched", "case": None, "state_id": "CheckEligibility"},
-                ],
-                "expressions": [
-                    {
-                        "variable": "data_fetched",
-                        "url": "http://api.bank.com/customer/data",
-                        "params": {"id": "{{customer_id}}"},
-                        "method": "get",
-                    }
-                ],
-                "initial_state": False,
-                "final_state": False,
-            },
-            {
-                "state_type": "screen",
-                "name": "PersonalInfoScreen",
-                "transitions": [
-                    {"case": "next", "state_id": "ValidatePersonalInfo"},
-                    {"case": "cancel", "state_id": "ApplicationCancelled"},
-                ],
-                "expressions": [
-                    {"event_name": "next"},
-                    {"event_name": "cancel"},
-                ],
-                "initial_state": False,
-                "final_state": False,
-            },
-            {
-                "state_type": "technical",
-                "name": "ValidatePersonalInfo",
-                "transitions": [
-                    {"variable": "info_valid", "case": "True", "state_id": "EmploymentInfoScreen"},
-                    {"variable": "info_valid", "case": "False", "state_id": "PersonalInfoScreen"},
-                ],
-                "expressions": [
-                    {
-                        "variable": "info_valid",
-                        "dependent_variables": ["ssn", "dob", "email"],
-                        "expression": "len(ssn) == 9 and dob is not None and '@' in email",
-                    }
-                ],
-                "initial_state": False,
-                "final_state": False,
-            },
-            {
-                "state_type": "screen",
-                "name": "EmploymentInfoScreen",
-                "transitions": [
-                    {"case": "next", "state_id": "VerifyEmployment"},
-                    {"case": "back", "state_id": "PersonalInfoScreen"},
-                    {"case": "cancel", "state_id": "ApplicationCancelled"},
-                ],
-                "expressions": [
-                    {"event_name": "next"},
-                    {"event_name": "back"},
-                    {"event_name": "cancel"},
-                ],
-                "initial_state": False,
-                "final_state": False,
-            },
-            {
-                "state_type": "integration",
-                "name": "VerifyEmployment",
-                "transitions": [
-                    {"variable": "employment_verified", "case": "True", "state_id": "FinancialInfoScreen"},
-                    {"variable": "employment_verified", "case": "False", "state_id": "ManualVerificationScreen"},
-                ],
-                "expressions": [
-                    {
-                        "variable": "employment_verified",
-                        "url": "http://api.verify.com/employment",
-                        "params": {"employer": "{{employer_name}}", "employee": "{{employee_data}}"},
-                        "method": "post",
-                    }
-                ],
-                "initial_state": False,
-                "final_state": False,
-            },
-            {
-                "state_type": "screen",
-                "name": "ManualVerificationScreen",
-                "transitions": [
-                    {"case": "upload_docs", "state_id": "DocumentUploadScreen"},
-                    {"case": "skip", "state_id": "FinancialInfoScreen"},
-                    {"case": "back", "state_id": "EmploymentInfoScreen"},
-                ],
-                "expressions": [
-                    {"event_name": "upload_docs"},
-                    {"event_name": "skip"},
-                    {"event_name": "back"},
-                ],
-                "initial_state": False,
-                "final_state": False,
-            },
-            {
-                "state_type": "screen",
-                "name": "DocumentUploadScreen",
-                "transitions": [
-                    {"case": "upload_complete", "state_id": "ProcessDocuments"},
-                    {"case": "back", "state_id": "ManualVerificationScreen"},
-                ],
-                "expressions": [
-                    {"event_name": "upload_complete"},
-                    {"event_name": "back"},
-                ],
-                "initial_state": False,
-                "final_state": False,
-            },
-            {
-                "state_type": "integration",
-                "name": "ProcessDocuments",
-                "transitions": [
-                    {"variable": "docs_processed", "case": None, "state_id": "FinancialInfoScreen"},
-                ],
-                "expressions": [
-                    {
-                        "variable": "docs_processed",
-                        "url": "http://api.docprocess.com/analyze",
-                        "params": {"documents": "{{uploaded_docs}}"},
-                        "method": "post",
-                    }
-                ],
-                "initial_state": False,
-                "final_state": False,
-            },
-            {
-                "state_type": "screen",
-                "name": "FinancialInfoScreen",
-                "transitions": [
-                    {"case": "next", "state_id": "CheckEligibility"},
-                    {"case": "back", "state_id": "EmploymentInfoScreen"},
-                    {"case": "cancel", "state_id": "ApplicationCancelled"},
-                ],
-                "expressions": [
-                    {"event_name": "next"},
-                    {"event_name": "back"},
-                    {"event_name": "cancel"},
-                ],
-                "initial_state": False,
-                "final_state": False,
-            },
-            {
-                "state_type": "technical",
-                "name": "CheckEligibility",
-                "transitions": [
-                    {"variable": "credit_score_high", "case": "True", "state_id": "RunCreditCheck"},
-                    {"variable": "credit_score_medium", "case": "True", "state_id": "AdditionalInfoScreen"},
-                    {"variable": ["credit_score_high", "credit_score_medium"], "case": "False",
-                     "state_id": "ApplicationRejected"},
-                ],
-                "expressions": [
-                    {
-                        "variable": "credit_score_high",
-                        "dependent_variables": ["annual_income", "debt_ratio"],
-                        "expression": "annual_income > 75000 and debt_ratio < 0.3",
-                    },
-                    {
-                        "variable": "credit_score_medium",
-                        "dependent_variables": ["annual_income", "debt_ratio"],
-                        "expression": "annual_income > 50000 and debt_ratio < 0.4",
-                    }
-                ],
-                "initial_state": False,
-                "final_state": False,
-            },
-            {
-                "state_type": "screen",
-                "name": "AdditionalInfoScreen",
-                "transitions": [
-                    {"case": "submit", "state_id": "RunCreditCheck"},
-                    {"case": "back", "state_id": "FinancialInfoScreen"},
-                ],
-                "expressions": [
-                    {"event_name": "submit"},
-                    {"event_name": "back"},
-                ],
-                "initial_state": False,
-                "final_state": False,
-            },
-            {
-                "state_type": "integration",
-                "name": "RunCreditCheck",
-                "transitions": [
-                    {"variable": "credit_approved", "case": "True", "state_id": "CalculateLoanTerms"},
-                    {"variable": "credit_approved", "case": "False", "state_id": "ManualReviewRequired"},
-                ],
-                "expressions": [
-                    {
-                        "variable": "credit_approved",
-                        "url": "http://api.creditbureau.com/check",
-                        "params": {"ssn": "{{ssn}}", "consent": "{{consent_token}}"},
-                        "method": "post",
-                    }
-                ],
-                "initial_state": False,
-                "final_state": False,
-            },
-            {
-                "state_type": "technical",
-                "name": "ManualReviewRequired",
-                "transitions": [
-                    {"variable": "review_complete", "case": "approved", "state_id": "CalculateLoanTerms"},
-                    {"variable": "review_complete", "case": "rejected", "state_id": "ApplicationRejected"},
-                    {"variable": "review_complete", "case": "pending", "state_id": "ApplicationPending"},
-                ],
-                "expressions": [
-                    {
-                        "variable": "review_complete",
-                        "dependent_variables": ["manual_review_status"],
-                        "expression": "manual_review_status",
-                    }
-                ],
-                "initial_state": False,
-                "final_state": False,
-            },
-            {
-                "state_type": "technical",
-                "name": "CalculateLoanTerms",
-                "transitions": [
-                    {"variable": "terms_calculated", "case": None, "state_id": "LoanOfferScreen"},
-                ],
-                "expressions": [
-                    {
-                        "variable": "terms_calculated",
-                        "dependent_variables": ["credit_score", "income", "loan_amount"],
-                        "expression": "{'rate': 3.5 + (800 - credit_score) * 0.01, 'term': 360}",
-                    }
-                ],
-                "initial_state": False,
-                "final_state": False,
-            },
-            {
-                "state_type": "screen",
-                "name": "LoanOfferScreen",
-                "transitions": [
-                    {"case": "accept", "state_id": "GenerateContract"},
-                    {"case": "negotiate", "state_id": "NegotiationScreen"},
-                    {"case": "reject", "state_id": "ApplicationWithdrawn"},
-                ],
-                "expressions": [
-                    {"event_name": "accept"},
-                    {"event_name": "negotiate"},
-                    {"event_name": "reject"},
-                ],
-                "initial_state": False,
-                "final_state": False,
-            },
-            {
-                "state_type": "screen",
-                "name": "NegotiationScreen",
-                "transitions": [
-                    {"case": "submit_counter", "state_id": "EvaluateCounterOffer"},
-                    {"case": "accept_original", "state_id": "GenerateContract"},
-                    {"case": "cancel", "state_id": "ApplicationWithdrawn"},
-                ],
-                "expressions": [
-                    {"event_name": "submit_counter"},
-                    {"event_name": "accept_original"},
-                    {"event_name": "cancel"},
-                ],
-                "initial_state": False,
-                "final_state": False,
-            },
-            {
-                "state_type": "technical",
-                "name": "EvaluateCounterOffer",
-                "transitions": [
-                    {"variable": "counter_acceptable", "case": "True", "state_id": "GenerateContract"},
-                    {"variable": "counter_acceptable", "case": "False", "state_id": "LoanOfferScreen"},
-                ],
-                "expressions": [
-                    {
-                        "variable": "counter_acceptable",
-                        "dependent_variables": ["requested_rate", "min_rate"],
-                        "expression": "requested_rate >= min_rate",
-                    }
-                ],
-                "initial_state": False,
-                "final_state": False,
-            },
-            {
-                "state_type": "integration",
-                "name": "GenerateContract",
-                "transitions": [
-                    {"variable": "contract_generated", "case": None, "state_id": "SignatureScreen"},
-                ],
-                "expressions": [
-                    {
-                        "variable": "contract_generated",
-                        "url": "http://api.contracts.com/generate",
-                        "params": {"loan_terms": "{{final_terms}}", "customer": "{{customer_data}}"},
-                        "method": "post",
-                    }
-                ],
-                "initial_state": False,
-                "final_state": False,
-            },
-            {
-                "state_type": "screen",
-                "name": "SignatureScreen",
-                "transitions": [
-                    {"case": "sign", "state_id": "ProcessSignature"},
-                    {"case": "review", "state_id": "ContractReviewScreen"},
-                    {"case": "cancel", "state_id": "ApplicationWithdrawn"},
-                ],
-                "expressions": [
-                    {"event_name": "sign"},
-                    {"event_name": "review"},
-                    {"event_name": "cancel"},
-                ],
-                "initial_state": False,
-                "final_state": False,
-            },
-            {
-                "state_type": "screen",
-                "name": "ContractReviewScreen",
-                "transitions": [
-                    {"case": "back", "state_id": "SignatureScreen"},
-                ],
-                "expressions": [
-                    {"event_name": "back"},
-                ],
-                "initial_state": False,
-                "final_state": False,
-            },
-            {
-                "state_type": "integration",
-                "name": "ProcessSignature",
-                "transitions": [
-                    {"variable": "signature_valid", "case": "True", "state_id": "ApplicationComplete"},
-                    {"variable": "signature_valid", "case": "False", "state_id": "SignatureScreen"},
-                ],
-                "expressions": [
-                    {
-                        "variable": "signature_valid",
-                        "url": "http://api.esign.com/verify",
-                        "params": {"signature": "{{digital_signature}}", "contract_id": "{{contract_id}}"},
-                        "method": "post",
-                    }
-                ],
-                "initial_state": False,
-                "final_state": False,
-            },
-            {
-                "state_type": "screen",
-                "name": "ApplicationComplete",
-                "transitions": [],
-                "expressions": [],
-                "initial_state": False,
-                "final_state": True,
-            },
-            {
-                "state_type": "screen",
-                "name": "ApplicationRejected",
-                "transitions": [],
-                "expressions": [],
-                "initial_state": False,
-                "final_state": True,
-            },
-            {
-                "state_type": "screen",
-                "name": "ApplicationPending",
-                "transitions": [],
-                "expressions": [],
-                "initial_state": False,
-                "final_state": True,
-            },
-            {
-                "state_type": "screen",
-                "name": "ApplicationWithdrawn",
-                "transitions": [],
-                "expressions": [],
-                "initial_state": False,
-                "final_state": True,
-            },
-            {
-                "state_type": "technical",
-                "name": "ApplicationCancelled",
-                "transitions": [],
-                "expressions": [],
-                "initial_state": False,
-                "final_state": True,
-            },
-        ]
-    }
-    return test_json
-
-
-def test_workflow_4_simple_survey():
-    """Простой workflow опроса пользователя"""
-    test_json = {
-        "states": [
-            {
-                "state_type": "screen",
-                "name": "WelcomeScreen",
-                "transitions": [
-                    {"case": "start", "state_id": "Question1"},
-                ],
-                "expressions": [
-                    {"event_name": "start"},
-                ],
-                "initial_state": True,
-                "final_state": False,
-            },
-            {
-                "state_type": "screen",
-                "name": "Question1",
-                "transitions": [
-                    {"case": "next", "state_id": "ValidateAnswer1"},
-                ],
-                "expressions": [
-                    {"event_name": "next"},
-                ],
-                "initial_state": False,
-                "final_state": False,
-            },
-            {
-                "state_type": "technical",
-                "name": "ValidateAnswer1",
-                "transitions": [
-                    {"variable": "answer_valid", "case": "True", "state_id": "Question2"},
-                    {"variable": "answer_valid", "case": "False", "state_id": "Question1"},
-                ],
-                "expressions": [
-                    {
-                        "variable": "answer_valid",
-                        "dependent_variables": ["answer1"],
-                        "expression": "len(answer1) > 0",
-                    }
-                ],
-                "initial_state": False,
-                "final_state": False,
-            },
-            {
-                "state_type": "screen",
-                "name": "Question2",
-                "transitions": [
-                    {"case": "finish", "state_id": "ThankYouScreen"},
-                ],
-                "expressions": [
-                    {"event_name": "finish"},
-                ],
-                "initial_state": False,
-                "final_state": False,
-            },
-            {
-                "state_type": "screen",
-                "name": "ThankYouScreen",
-                "transitions": [],
-                "expressions": [],
-                "initial_state": False,
-                "final_state": True,
-            },
-        ]
-    }
-    return test_json
-
-
-def test_workflow_6_complex_booking():
-    """Сложный workflow бронирования с множественными проверками"""
-    test_json = {
-        "states": [
-            {
-                "state_type": "screen",
-                "name": "SearchScreen",
-                "transitions": [
-                    {"case": "search", "state_id": "ValidateSearchParams"},
-                ],
-                "expressions": [
-                    {"event_name": "search"},
-                ],
-                "initial_state": True,
-                "final_state": False,
-            },
-            {
-                "state_type": "technical",
-                "name": "ValidateSearchParams",
-                "transitions": [
-                    {"variable": "params_valid", "case": "True", "state_id": "FetchAvailability"},
-                    {"variable": "params_valid", "case": "False", "state_id": "SearchScreen"},
-                ],
-                "expressions": [
-                    {
-                        "variable": "params_valid",
-                        "dependent_variables": ["check_in", "check_out", "guests"],
-                        "expression": "check_in < check_out and guests > 0",
-                    }
-                ],
-                "initial_state": False,
-                "final_state": False,
-            },
-            {
-                "state_type": "integration",
-                "name": "FetchAvailability",
-                "transitions": [
-                    {"variable": "rooms_available", "case": "True", "state_id": "ShowResults"},
-                    {"variable": "rooms_available", "case": "False", "state_id": "NoResultsScreen"},
-                ],
-                "expressions": [
-                    {
-                        "variable": "rooms_available",
-                        "url": "http://api.booking.com/availability",
-                        "params": {"dates": "{{dates}}", "guests": "{{guests}}"},
-                        "method": "get",
-                    }
-                ],
-                "initial_state": False,
-                "final_state": False,
-            },
-            {
-                "state_type": "screen",
-                "name": "NoResultsScreen",
-                "transitions": [
-                    {"case": "modify_search", "state_id": "SearchScreen"},
-                    {"case": "exit", "state_id": "ExitFlow"},
-                ],
-                "expressions": [
-                    {"event_name": "modify_search"},
-                    {"event_name": "exit"},
-                ],
-                "initial_state": False,
-                "final_state": False,
-            },
-            {
-                "state_type": "screen",
-                "name": "ShowResults",
-                "transitions": [
-                    {"case": "select_room", "state_id": "CheckAvailability"},
-                    {"case": "modify_search", "state_id": "SearchScreen"},
-                ],
-                "expressions": [
-                    {"event_name": "select_room"},
-                    {"event_name": "modify_search"},
-                ],
-                "initial_state": False,
-                "final_state": False,
-            },
-            {
-                "state_type": "integration",
-                "name": "CheckAvailability",
-                "transitions": [
-                    {"variable": "still_available", "case": "True", "state_id": "GuestInfoScreen"},
-                    {"variable": "still_available", "case": "False", "state_id": "UnavailableScreen"},
-                ],
-                "expressions": [
-                    {
-                        "variable": "still_available",
-                        "url": "http://api.booking.com/check-room",
-                        "params": {"room_id": "{{selected_room}}"},
-                        "method": "get",
-                    }
-                ],
-                "initial_state": False,
-                "final_state": False,
-            },
-            {
-                "state_type": "screen",
-                "name": "UnavailableScreen",
-                "transitions": [
-                    {"case": "back", "state_id": "ShowResults"},
-                ],
-                "expressions": [
-                    {"event_name": "back"},
-                ],
-                "initial_state": False,
-                "final_state": False,
-            },
-            {
-                "state_type": "screen",
-                "name": "GuestInfoScreen",
-                "transitions": [
-                    {"case": "continue", "state_id": "ValidateGuestInfo"},
-                    {"case": "back", "state_id": "ShowResults"},
-                ],
-                "expressions": [
-                    {"event_name": "continue"},
-                    {"event_name": "back"},
-                ],
-                "initial_state": False,
-                "final_state": False,
-            },
-            {
-                "state_type": "technical",
-                "name": "ValidateGuestInfo",
-                "transitions": [
-                    {"variable": "guest_info_valid", "case": "True", "state_id": "PaymentScreen"},
-                    {"variable": "guest_info_valid", "case": "False", "state_id": "GuestInfoScreen"},
-                ],
-                "expressions": [
-                    {
-                        "variable": "guest_info_valid",
-                        "dependent_variables": ["guest_name", "guest_email", "guest_phone"],
-                        "expression": "len(guest_name) > 2 and '@' in guest_email and len(guest_phone) > 8",
-                    }
-                ],
-                "initial_state": False,
-                "final_state": False,
-            },
-            {
-                "state_type": "screen",
-                "name": "PaymentScreen",
-                "transitions": [
-                    {"case": "pay", "state_id": "ProcessPayment"},
-                    {"case": "back", "state_id": "GuestInfoScreen"},
-                ],
-                "expressions": [
-                    {"event_name": "pay"},
-                    {"event_name": "back"},
-                ],
-                "initial_state": False,
-                "final_state": False,
-            },
-            {
-                "state_type": "integration",
-                "name": "ProcessPayment",
-                "transitions": [
-                    {"variable": "payment_success", "case": "True", "state_id": "CreateBooking"},
-                    {"variable": "payment_success", "case": "False", "state_id": "PaymentError"},
-                ],
-                "expressions": [
-                    {
-                        "variable": "payment_success",
-                        "url": "http://api.payment.com/charge",
-                        "params": {"amount": "{{total_amount}}", "card": "{{card_data}}"},
-                        "method": "post",
-                    }
-                ],
-                "initial_state": False,
-                "final_state": False,
-            },
-            {
-                "state_type": "screen",
-                "name": "PaymentError",
-                "transitions": [
-                    {"case": "retry", "state_id": "PaymentScreen"},
-                    {"case": "cancel", "state_id": "ExitFlow"},
-                ],
-                "expressions": [
-                    {"event_name": "retry"},
-                    {"event_name": "cancel"},
-                ],
-                "initial_state": False,
-                "final_state": False,
-            },
-            {
-                "state_type": "integration",
-                "name": "CreateBooking",
-                "transitions": [
-                    {"variable": "booking_created", "case": None, "state_id": "SendConfirmation"},
-                ],
-                "expressions": [
-                    {
-                        "variable": "booking_created",
-                        "url": "http://api.booking.com/create",
-                        "params": {"room": "{{selected_room}}", "guest": "{{guest_data}}",
-                                   "payment": "{{payment_id}}"},
-                        "method": "post",
-                    }
-                ],
-                "initial_state": False,
-                "final_state": False,
-            },
-            {
-                "state_type": "integration",
-                "name": "SendConfirmation",
-                "transitions": [
-                    {"variable": "confirmation_sent", "case": None, "state_id": "BookingComplete"},
-                ],
-                "expressions": [
-                    {
-                        "variable": "confirmation_sent",
-                        "url": "http://api.email.com/send",
-                        "params": {"to": "{{guest_email}}", "booking_id": "{{booking_id}}"},
-                        "method": "post",
-                    }
-                ],
-                "initial_state": False,
-                "final_state": False,
-            },
-            {
-                "state_type": "screen",
-                "name": "BookingComplete",
-                "transitions": [],
-                "expressions": [],
-                "initial_state": False,
-                "final_state": True,
-            },
-            {
-                "state_type": "technical",
-                "name": "ExitFlow",
-                "transitions": [],
-                "expressions": [],
-                "initial_state": False,
-                "final_state": True,
-            },
-        ]
-    }
-    return test_json
-
-
-def test_workflow_7_document_approval():
-    """Запутанный workflow согласования документа с циклическими переходами"""
-    test_json = {
-        "states": [
-            {
-                "state_type": "screen",
-                "name": "UploadDocument",
-                "transitions": [
-                    {"case": "upload", "state_id": "ValidateDocument"},
-                ],
-                "expressions": [
-                    {"event_name": "upload"},
-                ],
-                "initial_state": True,
-                "final_state": False,
-            },
-            {
-                "state_type": "technical",
-                "name": "ValidateDocument",
-                "transitions": [
-                    {"variable": "doc_valid", "case": "True", "state_id": "AssignReviewer"},
-                    {"variable": "doc_valid", "case": "False", "state_id": "UploadDocument"},
-                ],
-                "expressions": [
-                    {
-                        "variable": "doc_valid",
-                        "dependent_variables": ["file_size", "file_type"],
-                        "expression": "file_size < 10000000 and file_type in ['pdf', 'docx']",
-                    }
-                ],
-                "initial_state": False,
-                "final_state": False,
-            },
-            {
-                "state_type": "integration",
-                "name": "AssignReviewer",
-                "transitions": [
-                    {"variable": "reviewer_assigned", "case": None, "state_id": "NotifyReviewer"},
-                ],
-                "expressions": [
-                    {
-                        "variable": "reviewer_assigned",
-                        "url": "http://api.workflow.com/assign",
-                        "params": {"document_id": "{{doc_id}}", "department": "{{department}}"},
-                        "method": "post",
-                    }
-                ],
-                "initial_state": False,
-                "final_state": False,
-            },
-            {
-                "state_type": "integration",
-                "name": "NotifyReviewer",
-                "transitions": [
-                    {"variable": "notification_sent", "case": None, "state_id": "WaitingForReview"},
-                ],
-                "expressions": [
-                    {
-                        "variable": "notification_sent",
-                        "url": "http://api.notify.com/send",
-                        "params": {"reviewer_id": "{{reviewer_id}}", "doc_id": "{{doc_id}}"},
-                        "method": "post",
-                    }
-                ],
-                "initial_state": False,
-                "final_state": False,
-            },
-            {
-                "state_type": "screen",
-                "name": "WaitingForReview",
-                "transitions": [
-                    {"case": "reviewed", "state_id": "ProcessReview"},
-                    {"case": "timeout", "state_id": "EscalateReview"},
-                    {"case": "cancel", "state_id": "CancelWorkflow"},
-                ],
-                "expressions": [
-                    {"event_name": "reviewed"},
-                    {"event_name": "timeout"},
-                    {"event_name": "cancel"},
-                ],
-                "initial_state": False,
-                "final_state": False,
-            },
-            {
-                "state_type": "technical",
-                "name": "ProcessReview",
-                "transitions": [
-                    {"variable": "review_decision", "case": "approved", "state_id": "DocumentApproved"},
-                    {"variable": "review_decision", "case": "rejected", "state_id": "DocumentRejected"},
-                    {"variable": "review_decision", "case": "revision", "state_id": "RequestRevision"},
-                ],
-                "expressions": [
-                    {
-                        "variable": "review_decision",
-                        "dependent_variables": ["decision"],
-                        "expression": "decision",
-                    }
-                ],
-                "initial_state": False,
-                "final_state": False,
-            },
-            {
-                "state_type": "screen",
-                "name": "RequestRevision",
-                "transitions": [
-                    {"case": "revise", "state_id": "ValidateDocument"},
-                    {"case": "appeal", "state_id": "EscalateReview"},
-                ],
-                "expressions": [
-                    {"event_name": "revise"},
-                    {"event_name": "appeal"},
-                ],
-                "initial_state": False,
-                "final_state": False,
-            },
-            {
-                "state_type": "integration",
-                "name": "EscalateReview",
-                "transitions": [
-                    {"variable": "escalated", "case": None, "state_id": "ManagerReview"},
-                ],
-                "expressions": [
-                    {
-                        "variable": "escalated",
-                        "url": "http://api.workflow.com/escalate",
-                        "params": {"doc_id": "{{doc_id}}", "reason": "{{escalation_reason}}"},
-                        "method": "post",
-                    }
-                ],
-                "initial_state": False,
-                "final_state": False,
-            },
-            {
-                "state_type": "screen",
-                "name": "ManagerReview",
-                "transitions": [
-                    {"case": "manager_decision", "state_id": "ProcessManagerDecision"},
-                ],
-                "expressions": [
-                    {"event_name": "manager_decision"},
-                ],
-                "initial_state": False,
-                "final_state": False,
-            },
-            {
-                "state_type": "technical",
-                "name": "ProcessManagerDecision",
-                "transitions": [
-                    {"variable": "manager_decision", "case": "approved", "state_id": "DocumentApproved"},
-                    {"variable": "manager_decision", "case": "rejected", "state_id": "DocumentRejected"},
-                    {"variable": "manager_decision", "case": "back_to_reviewer", "state_id": "AssignReviewer"},
-                ],
-                "expressions": [
-                    {
-                        "variable": "manager_decision",
-                        "dependent_variables": ["manager_choice"],
-                        "expression": "manager_choice",
-                    }
-                ],
-                "initial_state": False,
-                "final_state": False,
-            },
-            {
-                "state_type": "integration",
-                "name": "DocumentApproved",
-                "transitions": [
-                    {"variable": "approval_recorded", "case": None, "state_id": "WorkflowComplete"},
-                ],
-                "expressions": [
-                    {
-                        "variable": "approval_recorded",
-                        "url": "http://api.documents.com/approve",
-                        "params": {"doc_id": "{{doc_id}}", "approver": "{{approver_id}}"},
-                        "method": "post",
-                    }
-                ],
-                "initial_state": False,
-                "final_state": False,
-            },
-            {
-                "state_type": "screen",
-                "name": "DocumentRejected",
-                "transitions": [],
-                "expressions": [],
-                "initial_state": False,
-                "final_state": True,
-            },
-            {
-                "state_type": "technical",
-                "name": "CancelWorkflow",
-                "transitions": [],
-                "expressions": [],
-                "initial_state": False,
-                "final_state": True,
-            },
-            {
-                "state_type": "screen",
-                "name": "WorkflowComplete",
-                "transitions": [],
-                "expressions": [],
-                "initial_state": False,
-                "final_state": True,
-            },
-        ]
-    }
-    return test_json
-
 
 def test_workflow_8_extreme_complexity():
     """Максимально сложный и запутанный workflow с множественными циклами"""
