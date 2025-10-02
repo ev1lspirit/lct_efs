@@ -20,7 +20,7 @@ LCT EFS (Workflow Management System) - это современная платф�
 
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Client Layer  │    │   API Gateway   │    │  Core Engine    │
+│   Client Layer  │    │   API           │    │  Core Engine    │
 │                 │    │                 │    │                 │
 │ • React/Vue     │───▶│ • FastAPI       │───▶│ • Automaton     │
 │ • Mobile App    │    │ • CORS          │    │ • State Parser  │
@@ -193,34 +193,6 @@ curl http://localhost:8080/healthcheck
     }
   }
 }
-```
-
-## 🔧 Конфигурация
-
-### Переменные окружения
-
-Создайте файл `.env` в корне проекта:
-
-```env
-# MongoDB
-MONGO_HOST=localhost
-MONGO_PORT=27017
-MONGO_USER=admin
-MONGO_PASSWORD=password
-MONGO_DB_NAME=lct_efs
-
-# Redis
-REDIS_HOST=localhost
-REDIS_PORT=6379
-REDIS_DB=0
-REDIS_PASSWORD=
-
-# PostgreSQL (опционально)
-DB_HOST=localhost
-DB_PORT=5432
-DB_USER=postgres
-DB_PASSWORD=password
-DB_NAME=lct_efs
 ```
 
 ## 📂 Структура проекта
@@ -396,27 +368,6 @@ kubectl apply -f deployments/middle_back_deployment.yaml
 - Валидация входных данных через Pydantic
 - Изоляция сессий через уникальные идентификаторы
 - Контроль доступа к внешним API
-
-## 🤝 Вклад в проект
-
-1. Форкните репозиторий
-2. Создайте feature-ветку
-3. Внесите изменения
-4. Добавьте тесты
-5. Создайте Pull Request
-
-## 📝 Лицензия
-
-Проект распространяется под лицензией MIT.
-
-## 📞 Поддержка
-
-Для вопросов и предложений:
-- Создайте Issue в репозитории
-- Обратитесь к документации в папке `docs/`
-- Изучите примеры в папке `examples/`
-
----
 
 **Версия:** 1.0.0  
 **Последнее обновление:** 02.10.2025
