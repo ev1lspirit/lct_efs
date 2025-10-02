@@ -145,14 +145,38 @@ class Automaton:
     def _evaluate_executables(self, event_name: str = None):
         with self.session_context as context:
             for expression in self.current_state.executables:
-                variable = expression.metadata.variable
+                # Для screen состояний используем event_name в качестве переменной
+                if self.current_state.type_ == StateTypeEnum.screen:
+                    variable = expression.metadata.event_name
+                else:
+                    variable = expression.metadata.variable
+                
                 try:
-                    result = (
-                        expression.result(event_name)
-                        if self.current_state.type_ == StateTypeEnum.screen
-                        else str(expression.result())
-                    )
+                    if self.current_state.type_ == StateTypeEnum.screen:
+                        result = expression.result(event_name)
+                    elif self.current_state.type_ == StateTypeEnum.integration:
+                        # Для integration states сохраняем JSON-данные ответа API
+                        logger.info(f"Executing integration state for variable: {variable}")
+                        raw_result = expression.result()
+                        logger.info(f"Integration raw_result type: {type(raw_result).__name__}")
+                        # Проверяем, является ли результат объектом с атрибутами
+                        if hasattr(raw_result, 'content'):
+                            # Это Response объект от API
+                            result = raw_result.content  # Сохраняем JSON содержимое
+                            logger.info(f"Raw result has 'content' attribute, extracting content")
+                            logger.info(f"Content type: {type(result).__name__}, value: {result}")
+                        else:
+                            result = raw_result
+                            logger.info(f"Raw result has no 'content' attribute, using as-is")
+                            logger.info(f"Result type: {type(result).__name__}, value: {result}")
+                        logger.info(f"About to save to context['{variable}']")
+                    else:
+                        # For technical states, save the result as is (do not convert to string)
+                        result = expression.result()
+                    
+                    logger.info(f"Setting context['{variable}'] = {type(result).__name__}")
                     context[variable] = result
+                    logger.info(f"✅ Context updated: {variable} = {result}")
                 except Exception as e:
                     raise RuntimeError(
                         f"Failed to evaluate expression for variable {variable}: {str(e)}"
@@ -192,13 +216,21 @@ class Automaton:
 
         while True:
             if self.current_state._final:
-                logger.info("Pipeline finished")
+                total_execution_time = time.time() - start_time
+                logger.info(
+                    f"🏁 Pipeline finished. Total execution time: {total_execution_time*1000:.2f}ms ({total_execution_time:.4f}s)"
+                )
                 break
+
+            # Засекаем время начала выполнения состояния
+            state_start_time = time.time()
 
             if self.current_state.type_ == StateTypeEnum.screen:
                 if on_return:
                     # returns screen data
                     self._call_state_checkpoint()
+                    # Сохраняем контекст перед возвратом экрана
+                    self.session_context.update_session()
                     try:
                         screens_client = MongoDBClient(
                             database=settings.MONGO_DB,
@@ -223,12 +255,25 @@ class Automaton:
                     current_state=self.current_state, event_name=event_name
                 )
             else:
+                # Логируем начало выполнения non-screen состояния
+                logger.info(
+                    f"⏱️  Executing {self.current_state.type_.value} state: '{self.current_state.name}'"
+                )
+                
                 evaluator = (
                     self._evaluate_service_executables
                     if self.current_state.type_ == StateTypeEnum.service
                     else partial(self._evaluate_executables, event_name)
                 )
                 evaluator()
+                
+                # Замеряем время выполнения и логируем
+                state_execution_time = time.time() - state_start_time
+                logger.info(
+                    f"✅ Completed {self.current_state.type_.value} state: '{self.current_state.name}' "
+                    f"in {state_execution_time*1000:.2f}ms ({state_execution_time:.4f}s)"
+                )
+                
                 candidate = self._get_transition_candidates_based_on_expressions(
                     current_state=self.current_state
                 )

@@ -1,14 +1,17 @@
 from abc import ABC, abstractmethod
-from enum import StrEnum
+from enum import Enum
 from functools import wraps
 import inspect
+import logging
+import re
 from urllib.parse import urlparse
-from venv import logger
 from attr import define, field
 from typing import TYPE_CHECKING, Any, Callable, Optional, TypeVar
 from simpleeval import simple_eval
 
 from utils import dump_context
+
+logger = logging.getLogger(__name__)
 
 
 if TYPE_CHECKING:
@@ -23,7 +26,7 @@ if TYPE_CHECKING:
 HandlerClass = TypeVar("HandlerClass")
 
 
-class BehaviourTypeEnum(StrEnum):
+class BehaviourTypeEnum(str, Enum):
     init = "init"
     error = "error"
 
@@ -83,19 +86,23 @@ class TechnicalHandler(BaseHandler):
     metadata: "TechnicalStateExpression"
     context: "SessionContext"
 
-    @check_context_consistency
     def result(self):
-        # if isinstance(self.metadata, TechnicalAndExpression):
-        #     return all(
-        #         simple_eval(expr, names=self.context)
-        #         for expr in self.metadata.expression
-        #     )
-        # if isinstance(self.metadata, TechnicalOrExpression):
-        #     return any(
-        #         simple_eval(expr, names=self.context)
-        #         for expr in self.metadata.expression
-        #     )
-        return simple_eval(self.metadata.expression, names=self.context.session, functions={"len": len, "sum": sum, "max": max, "min": min})
+        # Technical states should handle missing variables gracefully
+        # They often check for variable existence/validity, so we don't enforce dependent_variables
+        try:
+            return simple_eval(
+                self.metadata.expression, 
+                names=self.context.session, 
+                functions={"len": len, "sum": sum, "max": max, "min": min}
+            )
+        except Exception as e:
+            # If variable doesn't exist, treat as validation failure (False)
+            # simple_eval may throw various exceptions for undefined variables
+            logger.warning(
+                f"Error evaluating technical expression '{self.metadata.expression}': {type(e).__name__}: {e}. "
+                "Treating as validation failure (False)."
+            )
+            return False
 
 
 @define(slots=True)
@@ -145,8 +152,10 @@ class IntegrationHandler(BaseHandler):
     metadata: "IntegrationStateExpression"
     context: "SessionContext"
 
-    def _split_url(self):
-        parsed = urlparse(self.metadata.url)
+    def _split_url(self, url=None):
+        """Split URL into base_url and endpoint"""
+        url_to_parse = url or self.metadata.url
+        parsed = urlparse(url_to_parse)
         base_url = f"{parsed.scheme}://{parsed.netloc}"
         endpoint = parsed.path
         return base_url, endpoint
@@ -157,10 +166,107 @@ class IntegrationHandler(BaseHandler):
             raise ValueError(f"Method {self.metadata.method} not found in adapter")
         return method_attr
 
+    def _extract_variables(self, params: dict) -> list[str]:
+        """Извлекает список переменных из params в формате {{variable}}"""
+        pattern = r'\{\{(\w+)\}\}'
+        variables = set()
+        
+        def extract_from_value(value):
+            if isinstance(value, str):
+                matches = re.findall(pattern, value)
+                variables.update(matches)
+            elif isinstance(value, dict):
+                for v in value.values():
+                    extract_from_value(v)
+            elif isinstance(value, list):
+                for item in value:
+                    extract_from_value(item)
+        
+        for value in params.values():
+            extract_from_value(value)
+        
+        return list(variables)
+
+    def _interpolate_params(self, params: dict) -> dict:
+        """Заменяет {{variable}} на значения из context.session"""
+        pattern = r'\{\{(\w+)\}\}'
+        
+        def interpolate_value(value):
+            if isinstance(value, str):
+                # Находим все переменные в строке
+                matches = re.findall(pattern, value)
+                result = value
+                for var_name in matches:
+                    if var_name not in self.context.session:
+                        raise ValueError(
+                            f"Variable '{var_name}' not found in context. "
+                            f"Available variables: {list(self.context.session.keys())}"
+                        )
+                    context_value = self.context.session[var_name]
+                    # Заменяем {{var}} на значение
+                    result = result.replace(f"{{{{{var_name}}}}}", str(context_value))
+                return result
+            elif isinstance(value, dict):
+                return {k: interpolate_value(v) for k, v in value.items()}
+            elif isinstance(value, list):
+                return [interpolate_value(item) for item in value]
+            else:
+                return value
+        
+        return {key: interpolate_value(value) for key, value in params.items()}
+
     @check_context_consistency
     def result(self):  # type: ignore
-        base_url, endpoint = self._split_url()
+        # Интерполируем URL - заменяем {{variable}} в самом URL
+        interpolated_url = self.metadata.url
+        for match in re.finditer(r'\{\{(\w+)\}\}', self.metadata.url):
+            var_name = match.group(1)
+            if var_name not in self.context.session:
+                raise ValueError(
+                    f"Variable '{var_name}' required in URL but not found in context. "
+                    f"Available variables: {list(self.context.session.keys())}"
+                )
+            context_value = self.context.session[var_name]
+            interpolated_url = interpolated_url.replace(f"{{{{{var_name}}}}}", str(context_value))
+        
+        base_url, endpoint = self._split_url(interpolated_url)
+        
+        # Интерполируем params или body в зависимости от метода
+        method = self.metadata.method.lower()
+        if method in ['post', 'put', 'patch']:
+            # POST/PUT/PATCH используют body
+            params_to_use = self.metadata.body or {}
+            interpolated_params = self._interpolate_params(params_to_use)
+            logger.info(f"Integration request: {self.metadata.method.upper()} {interpolated_url}")
+            logger.debug(f"Original body: {self.metadata.body}")
+            logger.debug(f"Interpolated body: {interpolated_params}")
+        else:
+            # GET/DELETE используют params
+            params_to_use = self.metadata.params or {}
+            interpolated_params = self._interpolate_params(params_to_use)
+            logger.info(f"Integration request: {self.metadata.method.upper()} {interpolated_url}")
+            logger.debug(f"Original params: {self.metadata.params}")
+            logger.debug(f"Interpolated params: {interpolated_params}")
+        
         adapter = self.adapter(base_url=base_url)
         method_attr = self._get_method(adapter)
-        response = method_attr(endpoint=endpoint, params=self.metadata.params)
+        response = method_attr(endpoint=endpoint, params=interpolated_params)
+        
+        # Проверяем, является ли ответ ошибкой
+        if hasattr(response, 'error') and response.error:
+            logger.error(f"API request failed: {response.message}")
+            # Если указана переменная для ошибки, сохраняем в контекст
+            if self.metadata.error_variable:
+                with self.context as ctx:
+                    ctx[self.metadata.error_variable] = {
+                        'error': True,
+                        'message': response.message,
+                        'status_code': getattr(response, 'status_code', None),
+                        'content': getattr(response, 'content', None)
+                    }
+                logger.info(f"Error saved to context variable: {self.metadata.error_variable}")
+            # Возвращаем ошибку вместо исключения для возможности обработки в workflow
+            return response
+        
+        logger.info(f"Integration response received: {type(response).__name__}")
         return response

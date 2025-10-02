@@ -1,6 +1,6 @@
 from functools import wraps
 from attr import define, field, validators
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Optional
 
 from storage.mongo.client import MongoDBClient
 from storage.redis.service import RedisCache
@@ -232,33 +232,53 @@ class IntegrationStateExpression(BaseStateExpression):
         url (str): endpoint URL
         params (dict[str, Any]): query or body params
         method (str): GET, POST, etc
+        dependent_variables (list[str]): список переменных из context, требуемых в params (опционально)
+        error_variable (Optional[str]): переменная для сохранения ошибки API (опционально)
 
     Methods:
         execute (SessionContext, **kwargs): execute expression (must be overridden by subclasses)
 
     Examples:
         >>> from workflow_builder.expressions import Expression
-        >>> expr = Expression.integration(variable="z", url="http://example.com", params={"param": "value"})
+        >>> expr = Expression.integration(
+        ...     variable="user_data",
+        ...     url="http://api.example.com/users",
+        ...     params={"user_id": "{{user_id}}"},
+        ...     dependent_variables=["user_id"]
+        ... )
         >>> expr.variable
-        'z'
+        'user_data'
         >>> expr.url
-        'http://example.com'
+        'http://api.example.com/users'
         >>> expr.params
-        {'param': 'value'}
+        {'user_id': '{{user_id}}'}
+        >>> expr.dependent_variables
+        ['user_id']
 
     Notes:
         IntegrationStateExpression is a subclass of BaseStateExpression
+        dependent_variables - автоматически проверяется декоратором @check_context_consistency
+        error_variable - позволяет сохранить APIError в контекст для обработки в transitions
     """
 
     variable: str = field(validator=validators.instance_of(str))
     url: str = field(validator=validators.instance_of(str))  # endpoint URL
-    params: dict[str, Any] = field(
-        factory=dict, validator=validators.instance_of(dict)
-    )  # query or body params
+    params: Optional[dict[str, Any]] = field(
+        default=None, validator=validators.optional(validators.instance_of(dict))
+    )  # query params для GET/DELETE
+    body: Optional[dict[str, Any]] = field(
+        default=None, validator=validators.optional(validators.instance_of(dict))
+    )  # body params для POST/PUT/PATCH
     method: str = field(
         default="get",
         validator=validators.in_(["get", "post", "put", "delete", "patch"]),
     )  # HTTP method
+    dependent_variables: list[str] = field(
+        factory=list, validator=validators.instance_of(list)
+    )  # переменные из context, необходимые для params/body
+    error_variable: Optional[str] = field(
+        default=None, validator=validators.optional(validators.instance_of(str))
+    )  # переменная для сохранения ошибки
     type_: ClassVar[StateTypeEnum] = StateTypeEnum.integration
 
 
@@ -277,10 +297,24 @@ class Expression:
 
     @classmethod
     def integration(
-        cls, *, variable: str, url: str, params: dict[str, Any], method: str = "get"
+        cls,
+        *,
+        variable: str,
+        url: str,
+        params: dict[str, Any] = None,
+        body: dict[str, Any] = None,
+        method: str = "get",
+        dependent_variables: list[str] = None,
+        error_variable: str = None
     ) -> "IntegrationStateExpression":
         return IntegrationStateExpression(
-            variable=variable, url=url, params=params, method=method
+            variable=variable,
+            url=url,
+            params=params,
+            body=body,
+            method=method,
+            dependent_variables=dependent_variables or [],
+            error_variable=error_variable
         )
 
     @classmethod

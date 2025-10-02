@@ -1,0 +1,142 @@
+@startuml Use Case Diagram - Workflow Management System
+!theme blueprint
+
+title Use Case Diagram - Workflow Management System
+
+' Акторы
+:Client Application: as Client
+:Mobile App: as Mobile
+:Admin Panel: as Admin
+:External API: as API
+
+' Граница системы
+rectangle "Workflow Management System" {
+  
+  ' Use Cases для клиента
+  package "Client Workflow Operations" {
+    usecase "Initialize Workflow" as UC1
+    usecase "Send Event" as UC2
+    usecase "Receive Screen" as UC3
+    usecase "Update Context" as UC4
+    usecase "Navigate States" as UC5
+  }
+  
+  ' Use Cases для администратора
+  package "Workflow Administration" {
+    usecase "Create Workflow" as UC6
+    usecase "Save Workflow" as UC7
+    usecase "Validate Workflow" as UC8
+    usecase "Deploy Workflow" as UC9
+    usecase "Monitor Sessions" as UC10
+  }
+  
+  ' Use Cases для состояний
+  package "State Management" {
+    usecase "Process Screen State" as UC11
+    usecase "Execute Technical State" as UC12
+    usecase "Call Integration State" as UC13
+    usecase "Run Service State" as UC14
+    usecase "Evaluate Expressions" as UC15
+  }
+  
+  ' Use Cases для переходов
+  package "Transition Management" {
+    usecase "Evaluate Transitions" as UC16
+    usecase "Find Matching Transition" as UC17
+    usecase "Execute State Transition" as UC18
+  }
+  
+  ' Use Cases для хранилища
+  package "Data Persistence" {
+    usecase "Save Session Context" as UC19
+    usecase "Load Workflow Definition" as UC20
+    usecase "Store State Checkpoint" as UC21
+    usecase "Cache Session Data" as UC22
+  }
+}
+
+' Связи клиентских приложений
+Client --> UC1
+Client --> UC2
+Client --> UC3
+Client --> UC4
+
+Mobile --> UC1
+Mobile --> UC2
+Mobile --> UC3
+Mobile --> UC4
+
+' Связи администратора
+Admin --> UC6
+Admin --> UC7
+Admin --> UC8
+Admin --> UC9
+Admin --> UC10
+
+' Связи внешнего API
+API --> UC13
+
+' Отношения включения (include)
+UC1 ..> UC20 : <<include>>
+UC1 ..> UC22 : <<include>>
+
+UC2 ..> UC5 : <<include>>
+UC2 ..> UC4 : <<include>>
+
+UC5 ..> UC16 : <<include>>
+UC5 ..> UC18 : <<include>>
+
+UC11 ..> UC15 : <<include>>
+UC11 ..> UC3 : <<include>>
+
+UC12 ..> UC15 : <<include>>
+UC12 ..> UC16 : <<include>>
+
+UC13 ..> UC15 : <<include>>
+UC13 --> API : <<include>>
+
+UC14 ..> UC15 : <<include>>
+
+UC16 ..> UC17 : <<include>>
+
+UC18 ..> UC21 : <<include>>
+UC18 ..> UC19 : <<include>>
+
+UC7 ..> UC8 : <<include>>
+UC7 ..> UC20 : <<include>>
+
+' Отношения расширения (extend)
+UC5 ..> UC11 : <<extend>>\n[screen state]
+UC5 ..> UC12 : <<extend>>\n[technical state]
+UC5 ..> UC13 : <<extend>>\n[integration state]
+UC5 ..> UC14 : <<extend>>\n[service state]
+
+UC2 ..> UC19 : <<extend>>\n[context updated]
+
+' Заметки
+note right of UC1
+  Инициализация новой сессии
+  с указанным workflow_id
+end note
+
+note right of UC2
+  Отправка события от клиента
+  с параметрами в контексте
+end note
+
+note right of UC13
+  Вызов внешнего API
+  (например, JSONPlaceholder)
+end note
+
+note bottom of UC15
+  Оценка выражений с использованием
+  simpleeval и контекста сессии
+end note
+
+note bottom of UC16
+  Поиск подходящего перехода
+  на основе событий или условий
+end note
+
+@enduml

@@ -25,8 +25,25 @@ class TechnicalExpressionModel(BaseModel):
 class IntegrationExpressionModel(BaseModel):
     variable: str
     url: str
-    params: dict[str, Any]
+    params: Optional[dict[str, Any]] = None
+    body: Optional[dict[str, Any]] = None
     method: Literal["get", "post", "put", "delete", "patch"]
+    dependent_variables: Optional[list[str]] = None
+    error_variable: Optional[str] = None
+    
+    @model_validator(mode='after')
+    def validate_params_or_body(self):
+        """Validation: GET/DELETE should use params, POST/PUT/PATCH should use body"""
+        method = self.method.lower()
+        
+        if method in ['get', 'delete']:
+            if self.body is not None:
+                raise ValueError(f"Method '{method}' should use 'params', not 'body'")
+        elif method in ['post', 'put', 'patch']:
+            if self.params is not None and self.body is None:
+                raise ValueError(f"Method '{method}' should use 'body', not 'params'")
+        
+        return self
 
 
 class EventModel(BaseModel):
@@ -81,6 +98,11 @@ class StateSet(BaseModel):
 
     @model_validator(mode="before")
     def validate_states(cls, values):
+        # Handle both cases: dict with "states" key or direct list
+        if isinstance(values, list):
+            # If values is already a list, wrap it in a dict
+            values = {"states": values}
+        
         states = values.get("states", [])
         if not states:
             return values

@@ -93,16 +93,39 @@ def prepare_context_response(context: dict):
         context = context.decode()
     if isinstance(context, str):
         return json.loads(context)
+    
+    def safe_decode_value(v):
+        """Safely decode value from Redis - try JSON first, then plain decode"""
+        if v.startswith(b"{") or v.startswith(b"["):
+            try:
+                return json.loads(v)
+            except (json.JSONDecodeError, ValueError):
+                # If JSON parsing fails, return as string
+                return v.decode()
+        return v.decode()
+    
     return {
-        k.decode(): (
-            json.loads(v) if v.startswith(b"{") or v.startswith(b"[") else v.decode()
-        )
+        k.decode(): safe_decode_value(v)
         for k, v in context.items()
     }
+
+def _convert_bools_to_str(obj):
+    """Recursively convert all bool and None values to strings in nested structures."""
+    if obj is None:
+        return "None"
+    elif isinstance(obj, bool):
+        return str(obj)
+    elif isinstance(obj, dict):
+        return {k: _convert_bools_to_str(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [_convert_bools_to_str(item) for item in obj]
+    else:
+        return obj
 
 def dump_context(context_data: dict) -> dict:
     """
     Dumps the context data to a JSON-serializable format.
+    Converts all boolean and None values (including nested ones) to strings for Redis compatibility.
 
     Args:
         context_data (dict): The context data to dump.
@@ -114,8 +137,17 @@ def dump_context(context_data: dict) -> dict:
     for key, value in context_data.items():
         if isinstance(key, (bytes, bytearray)):
             key = key.decode()
-        if isinstance(value, (dict, list)):
+        
+        # Skip None values at top level or convert to string
+        if value is None:
+            dumped_context[key] = "None"
+        elif isinstance(value, (dict, list)):
+            # Convert bools and None recursively before JSON serialization
+            value = _convert_bools_to_str(value)
             dumped_context[key] = json.dumps(value)
+        elif isinstance(value, bool):
+            # Convert bool to string for Redis compatibility
+            dumped_context[key] = str(value)
         else:
             dumped_context[key] = value.decode() if isinstance(value, (bytes, bytearray)) else value
     return dumped_context

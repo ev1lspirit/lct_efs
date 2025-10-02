@@ -1,6 +1,7 @@
 import logging
 import uuid
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from fastapi.testclient import TestClient
 from starlette.middleware.cors import CORSMiddleware
@@ -24,7 +25,6 @@ app.add_middleware(
     allow_methods=["*"],  # Разрешить все HTTP методы (GET, POST, OPTIONS и т.д.)
     allow_headers=["*"],  # Разрешить все заголовки
 )
-
 app.include_router(router)
 
 

@@ -149,6 +149,105 @@ class MongoDBClient:
         doc["_id"] = str(doc["_id"])
         return doc
 
+    def insert_workflow_with_format_validation(self, workflow_data: Dict[str, Any]) -> Optional[str]:
+        """Добавляет workflow с валидацией нового формата.
+        
+        Новый формат поддерживает:
+        - 'body' вместо 'params' для POST/PUT/PATCH запросов в integration states
+        - Сохранение screens отдельно в коллекции screens
+        - predefined_context в отдельной коллекции
+        
+        Args:
+            workflow_data: Полные данные workflow включая states и predefined_context
+            
+        Returns:
+            ID вставленного документа или None в случае ошибки
+        """
+        try:
+            # Валидируем структуру
+            if "states" not in workflow_data:
+                logger.error("Workflow data must contain 'states' key")
+                return None
+            
+            # Валидируем integration states
+            for state in workflow_data.get("states", []):
+                if state.get("state_type") == "integration":
+                    for expr in state.get("expressions", []):
+                        method = expr.get("method", "").lower()
+                        has_body = "body" in expr
+                        has_params = "params" in expr
+                        
+                        # POST/PUT/PATCH должны использовать body
+                        if method in ["post", "put", "patch"]:
+                            if has_params and not has_body:
+                                logger.warning(
+                                    f"State '{state.get('name')}': POST/PUT/PATCH should use 'body' instead of 'params'. "
+                                    "Consider updating to new format."
+                                )
+                            elif has_body:
+                                logger.debug(f"State '{state.get('name')}': Using new format with 'body'")
+            
+            # Сохраняем только states (без screens и predefined_context)
+            states_only = {"states": workflow_data["states"]}
+            result = self.insert_description(states_only)
+            
+            if result:
+                logger.info(f"Workflow saved with new format support. ID: {result}")
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error inserting workflow with format validation: {e}", exc_info=True)
+            return None
+
+    def get_workflow_with_context(self, workflow_id: str) -> Optional[Dict[str, Any]]:
+        """Получает workflow со всеми связанными данными.
+        
+        Args:
+            workflow_id: ID workflow документа
+            
+        Returns:
+            Полный workflow с states, screens и context
+        """
+        try:
+            # Получаем states
+            workflow_doc = self.get(workflow_id)
+            if not workflow_doc:
+                logger.warning(f"Workflow {workflow_id} not found")
+                return None
+            
+            # Получаем context из отдельной коллекции
+            context_client = MongoDBClient(
+                database=self.db.name,
+                collection=settings.WORKFLOW_MONGO_COLLECTION
+            )
+            context_doc = context_client.get(workflow_id)
+            
+            # Получаем screens из отдельной коллекции
+            screens_client = MongoDBClient(
+                database=self.db.name,
+                collection=settings.SCREENS_MONGO_COLLECTION
+            )
+            screens_docs = list(screens_client.collection.find({"workflow_id": workflow_id}))
+            
+            # Формируем полный результат
+            result = {
+                "_id": workflow_doc["_id"],
+                "states": workflow_doc.get("states", []),
+                "predefined_context": context_doc if context_doc else {},
+                "screens": {
+                    screen["state_id"]: screen["screen"]
+                    for screen in screens_docs
+                }
+            }
+            
+            logger.info(f"Retrieved workflow {workflow_id} with {len(screens_docs)} screens")
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error getting workflow with context: {e}", exc_info=True)
+            return None
+
     def __del__(self):
         """Закрывает соединение с MongoDB при удалении объекта"""
         if self.client:

@@ -12,5 +12,5 @@ if __name__ == "__main__":
 
     parser = GlobalStateParser("Init", workflow_id="1234")
     parser.get_automaton_subgraph()
-    automaton = Automaton.
+    automaton = Automaton()
     automaton.run()

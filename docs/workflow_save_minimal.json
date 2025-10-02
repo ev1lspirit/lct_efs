@@ -1,0 +1,39 @@
+{
+  "states": {
+    "states": [
+      {
+        "state_type": "service",
+        "name": "__service_init",
+        "screen": {},
+        "transitions": [
+          {
+            "case": null,
+            "state_id": "welcome_screen",
+            "variable": null
+          }
+        ],
+        "expressions": [],
+        "initial_state": true,
+        "events": [],
+        "final_state": false
+      },
+      {
+        "state_type": "screen",
+        "name": "welcome_screen",
+        "screen": {
+          "title": "Добро пожаловать",
+          "description": "Простой пример workflow"
+        },
+        "transitions": [],
+        "expressions": [],
+        "initial_state": false,
+        "events": [],
+        "final_state": true
+      }
+    ]
+  },
+  "predefined_context": {
+    "user_id": "12345",
+    "app_name": "Test App"
+  }
+}
