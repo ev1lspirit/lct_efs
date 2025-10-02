@@ -263,16 +263,19 @@ class IntegrationStateExpression(BaseStateExpression):
 
     variable: str = field(validator=validators.instance_of(str))
     url: str = field(validator=validators.instance_of(str))  # endpoint URL
-    params: dict[str, Any] = field(
-        factory=dict, validator=validators.instance_of(dict)
-    )  # query or body params
+    params: Optional[dict[str, Any]] = field(
+        default=None, validator=validators.optional(validators.instance_of(dict))
+    )  # query params для GET/DELETE
+    body: Optional[dict[str, Any]] = field(
+        default=None, validator=validators.optional(validators.instance_of(dict))
+    )  # body params для POST/PUT/PATCH
     method: str = field(
         default="get",
         validator=validators.in_(["get", "post", "put", "delete", "patch"]),
     )  # HTTP method
     dependent_variables: list[str] = field(
         factory=list, validator=validators.instance_of(list)
-    )  # переменные из context, необходимые для params
+    )  # переменные из context, необходимые для params/body
     error_variable: Optional[str] = field(
         default=None, validator=validators.optional(validators.instance_of(str))
     )  # переменная для сохранения ошибки
@@ -298,7 +301,8 @@ class Expression:
         *,
         variable: str,
         url: str,
-        params: dict[str, Any],
+        params: dict[str, Any] = None,
+        body: dict[str, Any] = None,
         method: str = "get",
         dependent_variables: list[str] = None,
         error_variable: str = None
@@ -307,6 +311,7 @@ class Expression:
             variable=variable,
             url=url,
             params=params,
+            body=body,
             method=method,
             dependent_variables=dependent_variables or [],
             error_variable=error_variable

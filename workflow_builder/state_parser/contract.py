@@ -25,8 +25,25 @@ class TechnicalExpressionModel(BaseModel):
 class IntegrationExpressionModel(BaseModel):
     variable: str
     url: str
-    params: dict[str, Any]
+    params: Optional[dict[str, Any]] = None
+    body: Optional[dict[str, Any]] = None
     method: Literal["get", "post", "put", "delete", "patch"]
+    dependent_variables: Optional[list[str]] = None
+    error_variable: Optional[str] = None
+    
+    @model_validator(mode='after')
+    def validate_params_or_body(self):
+        """Валидация: GET/DELETE должны использовать params, POST/PUT/PATCH должны использовать body"""
+        method = self.method.lower()
+        
+        if method in ['get', 'delete']:
+            if self.body is not None:
+                raise ValueError(f"Method '{method}' should use 'params', not 'body'")
+        elif method in ['post', 'put', 'patch']:
+            if self.params is not None and self.body is None:
+                raise ValueError(f"Method '{method}' should use 'body', not 'params'")
+        
+        return self
 
 
 class EventModel(BaseModel):

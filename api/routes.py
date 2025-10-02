@@ -88,6 +88,54 @@ async def save_workflow(
         )
 
 
+@router.get("/workflow/{workflow_id}/full")
+async def get_full_workflow(
+    workflow_id: str,
+    mongo_client: Callable = Depends(get_mongo_client_as_dependency),
+) -> dict[str, Any]:
+    """
+    Get complete workflow including states, screens, and predefined context.
+
+    Args:
+        workflow_id: MongoDB document ID of the workflow
+        mongo_client: MongoDB client dependency
+
+    Returns:
+        dict: Complete workflow data with states, screens, and context
+
+    Raises:
+        HTTPException: If workflow not found or retrieval fails
+    """
+    logger.info(f"Fetching full workflow data for ID: {workflow_id}")
+    
+    try:
+        states_client = mongo_client(collection=settings.STATES_MONGO_COLLECTION)
+        workflow_data = states_client.get_workflow_with_context(workflow_id)
+        
+        if not workflow_data:
+            logger.warning(f"Workflow {workflow_id} not found")
+            raise HTTPException(
+                status_code=404,
+                detail=f"Workflow with ID {workflow_id} not found"
+            )
+        
+        logger.info(f"Successfully retrieved full workflow {workflow_id}")
+        return {
+            "status": "success",
+            "workflow_id": workflow_id,
+            "data": workflow_data
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching full workflow {workflow_id}: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail="Internal server error while fetching workflow"
+        )
+
+
 @router.post("/client/workflow")
 async def check_session(
     body: WorkflowRequest,
@@ -165,7 +213,7 @@ async def _save_workflow_states(
     body: SaveWorkflowRequest, states_client: MongoDBClient
 ) -> str:
     """
-    Save workflow states to MongoDB.
+    Save workflow states to MongoDB with new format validation.
 
     Args:
         body: SaveWorkflowRequest containing states
@@ -180,10 +228,14 @@ async def _save_workflow_states(
     try:
         # Convert Pydantic models to dictionaries
         state_list = [state.model_dump() for state in body.states.states]
-        state_dict = {"states": state_list}
-        logger.debug(f"Saving {len(state_list)} states to MongoDB")
-        # Save to MongoDB
-        inserted_id = states_client.insert_description(state_dict)
+        workflow_data = {
+            "states": state_list,
+            "predefined_context": body.predefined_context
+        }
+        logger.debug(f"Saving {len(state_list)} states to MongoDB with new format validation")
+        
+        # Save to MongoDB using new method with format validation
+        inserted_id = states_client.insert_workflow_with_format_validation(workflow_data)
 
         if not inserted_id:
             logger.error("MongoDB returned no ID for inserted states document")

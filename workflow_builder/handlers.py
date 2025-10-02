@@ -231,12 +231,22 @@ class IntegrationHandler(BaseHandler):
         
         base_url, endpoint = self._split_url(interpolated_url)
         
-        # Интерполируем params перед отправкой запроса
-        interpolated_params = self._interpolate_params(self.metadata.params)
-        
-        logger.info(f"Integration request: {self.metadata.method.upper()} {interpolated_url}")
-        logger.debug(f"Original params: {self.metadata.params}")
-        logger.debug(f"Interpolated params: {interpolated_params}")
+        # Интерполируем params или body в зависимости от метода
+        method = self.metadata.method.lower()
+        if method in ['post', 'put', 'patch']:
+            # POST/PUT/PATCH используют body
+            params_to_use = self.metadata.body or {}
+            interpolated_params = self._interpolate_params(params_to_use)
+            logger.info(f"Integration request: {self.metadata.method.upper()} {interpolated_url}")
+            logger.debug(f"Original body: {self.metadata.body}")
+            logger.debug(f"Interpolated body: {interpolated_params}")
+        else:
+            # GET/DELETE используют params
+            params_to_use = self.metadata.params or {}
+            interpolated_params = self._interpolate_params(params_to_use)
+            logger.info(f"Integration request: {self.metadata.method.upper()} {interpolated_url}")
+            logger.debug(f"Original params: {self.metadata.params}")
+            logger.debug(f"Interpolated params: {interpolated_params}")
         
         adapter = self.adapter(base_url=base_url)
         method_attr = self._get_method(adapter)

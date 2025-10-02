@@ -1,0 +1,3161 @@
+{
+  "states": [
+    {
+      "state_type": "technical",
+      "name": "InitCartWorkflow",
+      "transitions": [
+        {
+          "variable": "init_done",
+          "case": "True",
+          "state_id": "FetchCartSnapshot"
+        }
+      ],
+      "expressions": [
+        {
+          "variable": "init_done",
+          "dependent_variables": [],
+          "expression": "'True'"
+        }
+      ],
+      "initial_state": true,
+      "final_state": false
+    },
+    {
+      "state_type": "integration",
+      "name": "FetchCartSnapshot",
+      "transitions": [
+        {
+          "variable": "cart_snapshot",
+          "case": null,
+          "state_id": "FetchStoresCatalog"
+        },
+        {
+          "variable": "cart_snapshot_error",
+          "case": null,
+          "state_id": "CartFallbackScreen"
+        }
+      ],
+      "expressions": [
+        {
+          "variable": "cart_snapshot",
+          "url": "{{base_url}}/advertisements",
+          "params": {},
+          "method": "get",
+          "dependent_variables": [
+            "base_url"
+          ],
+          "error_variable": "cart_snapshot_error"
+        }
+      ],
+      "initial_state": false,
+      "final_state": false
+    },
+    {
+      "state_type": "integration",
+      "name": "FetchStoresCatalog",
+      "transitions": [
+        {
+          "variable": "stores_catalog",
+          "case": null,
+          "state_id": "ProcessStoresCatalog"
+        }
+      ],
+      "expressions": [
+        {
+          "variable": "stores_catalog",
+          "url": "{{base_url}}/users/role/MODERATOR",
+          "params": {},
+          "method": "get",
+          "dependent_variables": [
+            "base_url"
+          ],
+          "error_variable": "stores_catalog_error"
+        }
+      ],
+      "initial_state": false,
+      "final_state": false
+    },
+    {
+      "state_type": "technical",
+      "name": "ProcessStoresCatalog",
+      "transitions": [
+        {
+          "variable": "stores_catalog_processed",
+          "case": "True",
+          "state_id": "FetchRecommendedProducts"
+        }
+      ],
+      "expressions": [
+        {
+          "variable": "stores_catalog_error_flag",
+          "dependent_variables": [
+            "stores_catalog_error"
+          ],
+          "expression": "stores_catalog_error.get('error') if stores_catalog_error else False"
+        },
+        {
+          "variable": "stores_catalog_source",
+          "dependent_variables": [
+            "stores_catalog_error_flag"
+          ],
+          "expression": "'fallback' if stores_catalog_error_flag else 'remote'"
+        },
+        {
+          "variable": "stores_catalog",
+          "dependent_variables": [
+            "stores_catalog_error_flag",
+            "stores_catalog",
+            "stores_catalog_fallback"
+          ],
+          "expression": "stores_catalog_fallback if stores_catalog_error_flag else stores_catalog"
+        },
+        {
+          "variable": "stores_catalog_processed",
+          "dependent_variables": [],
+          "expression": "'True'"
+        }
+      ],
+      "initial_state": false,
+      "final_state": false
+    },
+    {
+      "state_type": "integration",
+      "name": "FetchRecommendedProducts",
+      "transitions": [
+        {
+          "variable": "recommended_products",
+          "case": null,
+          "state_id": "ProcessRecommendedProducts"
+        }
+      ],
+      "expressions": [
+        {
+          "variable": "recommended_products",
+          "url": "{{base_url}}/advertisements/owner/{{user_id}}",
+          "params": {},
+          "method": "get",
+          "dependent_variables": [
+            "base_url",
+            "user_id"
+          ],
+          "error_variable": "recommended_products_error"
+        }
+      ],
+      "initial_state": false,
+      "final_state": false
+    },
+    {
+      "state_type": "technical",
+      "name": "ProcessRecommendedProducts",
+      "transitions": [
+        {
+          "variable": "recommended_products_ready",
+          "case": "True",
+          "state_id": "PrepareCartDisplay"
+        }
+      ],
+      "expressions": [
+        {
+          "variable": "recommended_products_error_flag",
+          "dependent_variables": [
+            "recommended_products_error"
+          ],
+          "expression": "recommended_products_error.get('error') if recommended_products_error else False"
+        },
+        {
+          "variable": "recommended_products_source",
+          "dependent_variables": [
+            "recommended_products_error_flag"
+          ],
+          "expression": "'fallback' if recommended_products_error_flag else 'remote'"
+        },
+        {
+          "variable": "recommended_products",
+          "dependent_variables": [
+            "recommended_products_error_flag",
+            "recommended_products",
+            "recommended_products_fallback"
+          ],
+          "expression": "recommended_products_fallback if recommended_products_error_flag else recommended_products"
+        },
+        {
+          "variable": "recommended_products_count",
+          "dependent_variables": [
+            "recommended_products"
+          ],
+          "expression": "len(recommended_products)"
+        },
+        {
+          "variable": "recommended_products_ready",
+          "dependent_variables": [],
+          "expression": "'True'"
+        }
+      ],
+      "initial_state": false,
+      "final_state": false
+    },
+    {
+      "state_type": "technical",
+      "name": "PrepareCartDisplay",
+      "transitions": [
+        {
+          "variable": "cart_display_ready",
+          "case": "True",
+          "state_id": "CartOverviewScreen"
+        }
+      ],
+      "expressions": [
+        {
+          "variable": "cart_snapshot_error_flag",
+          "dependent_variables": [
+            "cart_snapshot_error"
+          ],
+          "expression": "cart_snapshot_error.get('error') if cart_snapshot_error else False"
+        },
+        {
+          "variable": "cart_snapshot",
+          "dependent_variables": [
+            "cart_snapshot_error_flag",
+            "cart_snapshot",
+            "stores_catalog",
+            "recommended_products"
+          ],
+          "expression": "{'stores': [{'id': 1, 'name': 'Fallback Store', 'rating': 4.5, 'delivery_description': 'Доставка недоступна', 'items': []}], 'summary': {'total': 0, 'subtotal': 0, 'discount': 0, 'total_items': 0}, 'user': {'id': user_id, 'first_name': 'Пользователь'}, 'delivery': {'address': 'Не указан'}} if cart_snapshot_error_flag or not cart_snapshot else cart_snapshot"
+        },
+        {
+          "variable": "cart_display_ready",
+          "dependent_variables": [],
+          "expression": "'True'"
+        }
+      ],
+      "initial_state": false,
+      "final_state": false
+    },
+    {
+      "state_type": "screen",
+      "name": "CartOverviewScreen",
+      "transitions": [
+        {
+          "case": "refresh_cart",
+          "state_id": "FetchCartSnapshot"
+        },
+        {
+          "case": "add_item",
+          "state_id": "AddItemToCart"
+        },
+        {
+          "case": "remove_item",
+          "state_id": "RemoveItemFromCart"
+        },
+        {
+          "case": "toggle_item",
+          "state_id": "ToggleSelectionState"
+        },
+        {
+          "case": "clear_cart",
+          "state_id": "ClearCart"
+        },
+        {
+          "case": "checkout",
+          "state_id": "ResetCheckoutError"
+        }
+      ],
+      "expressions": [
+        {
+          "event_name": "refresh_cart"
+        },
+        {
+          "event_name": "add_item"
+        },
+        {
+          "event_name": "remove_item"
+        },
+        {
+          "event_name": "toggle_item"
+        },
+        {
+          "event_name": "clear_cart"
+        },
+        {
+          "event_name": "checkout"
+        }
+      ],
+      "initial_state": false,
+      "final_state": false,
+      "screen": {
+        "id": "screen-cart-overview",
+        "type": "Screen",
+        "name": "Корзина",
+        "style": {
+          "display": "flex",
+          "flexDirection": "column",
+          "minHeight": "720px",
+          "backgroundColor": "#F5F5F5",
+          "borderRadius": "12px",
+          "padding": "0px"
+        },
+        "sections": {
+          "header": {
+            "id": "section-cart-header",
+            "type": "Section",
+            "properties": {
+              "slot": "header",
+              "padding": 0,
+              "spacing": 0,
+              "flexDirection": "column"
+            },
+            "style": {
+              "width": "100%",
+              "background": "#ffffff",
+              "display": "flex",
+              "flexDirection": "column"
+            },
+            "children": [
+              {
+                "id": "row-header-top",
+                "type": "row",
+                "properties": {
+                  "spacing": 0,
+                  "alignItems": "center",
+                  "justifyContent": "space-between",
+                  "padding": 16
+                },
+                "style": {
+                  "width": "100%",
+                  "flexShrink": 0,
+                  "paddingBottom": "16px"
+                },
+                "children": [
+                  {
+                    "id": "button-back",
+                    "type": "button",
+                    "properties": {
+                      "text": "←",
+                      "variant": "secondary",
+                      "event": "refresh_cart"
+                    },
+                    "style": {
+                      "width": "40px",
+                      "height": "40px",
+                      "border": "none",
+                      "background": "transparent",
+                      "fontSize": "24px",
+                      "color": "#000000",
+                      "padding": "0"
+                    }
+                  },
+                  {
+                    "id": "text-cart-title",
+                    "type": "text",
+                    "properties": {
+                      "content": "Корзина",
+                      "variant": "heading"
+                    },
+                    "style": {
+                      "fontSize": "17px",
+                      "fontWeight": 600,
+                      "color": "#000000",
+                      "flex": "1",
+                      "textAlign": "center"
+                    }
+                  },
+                  {
+                    "id": "spacer",
+                    "type": "text",
+                    "properties": {
+                      "content": ""
+                    },
+                    "style": {
+                      "width": "40px"
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "row-header-controls",
+                "type": "row",
+                "properties": {
+                  "spacing": 8,
+                  "alignItems": "center",
+                  "justifyContent": "space-between",
+                  "padding": 16
+                },
+                "style": {
+                  "width": "100%",
+                  "flexShrink": 0,
+                  "borderTop": "1px solid #E5E5E5",
+                  "paddingTop": "16px"
+                },
+                "children": [
+                  {
+                    "id": "row-select-all",
+                    "type": "row",
+                    "properties": {
+                      "spacing": 8,
+                      "alignItems": "center"
+                    },
+                    "children": [
+                      {
+                        "id": "checkbox-select-all",
+                        "type": "checkbox",
+                        "properties": {
+                          "checked": true,
+                          "event": "toggle_item"
+                        },
+                        "style": {
+                          "width": "20px",
+                          "height": "20px"
+                        }
+                      },
+                      {
+                        "id": "text-select-all",
+                        "type": "text",
+                        "properties": {
+                          "content": "Выбрать всё",
+                          "variant": "body"
+                        },
+                        "style": {
+                          "fontSize": "15px",
+                          "color": "#000000",
+                          "fontWeight": 400
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "id": "button-clear-all",
+                    "type": "button",
+                    "properties": {
+                      "text": {
+                        "reference": "${'Удалить (' + str(selected_items_count) + ')'}",
+                        "value": "Удалить (3)"
+                      },
+                      "variant": "link",
+                      "event": "clear_cart"
+                    },
+                    "style": {
+                      "fontSize": "15px",
+                      "color": "#007AFF",
+                      "background": "transparent",
+                      "border": "none",
+                      "padding": "0",
+                      "fontWeight": 400
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "body": {
+            "id": "section-cart-body",
+            "type": "Section",
+            "properties": {
+              "slot": "body",
+              "padding": 16,
+              "spacing": 16,
+              "alignItems": "stretch"
+            },
+            "style": {
+              "flex": "1 1 auto",
+              "overflowY": "auto"
+            },
+            "children": [
+              {
+                "id": "list-stores",
+                "type": "list",
+                "properties": {
+                  "variant": "unordered",
+                  "spacing": 16,
+                  "items": {
+                    "reference": "${recommended_products}",
+                    "value": []
+                  },
+                  "itemAlias": "store"
+                },
+                "style": {
+                  "listStyleType": "none",
+                  "padding": 0,
+                  "margin": 0,
+                  "display": "flex",
+                  "flexDirection": "column",
+                  "gap": "16px"
+                },
+                "children": [
+                  {
+                    "id": "column-store",
+                    "type": "column",
+                    "properties": {
+                      "spacing": 12,
+                      "padding": 16,
+                      "background": "#ffffff"
+                    },
+                    "style": {
+                      "borderRadius": "8px",
+                      "boxShadow": "0 4px 12px rgba(15, 23, 42, 0.08)"
+                    },
+                    "children": [
+                      {
+                        "id": "row-store-header",
+                        "type": "row",
+                        "properties": {
+                          "spacing": 8,
+                          "alignItems": "center"
+                        },
+                        "children": [
+                          {
+                            "id": "checkbox-store",
+                            "type": "checkbox",
+                            "properties": {
+                              "checked": true,
+                              "event": "toggle_item"
+                            },
+                            "style": {
+                              "width": "20px",
+                              "height": "20px"
+                            }
+                          },
+                          {
+                            "id": "text-store-name",
+                            "type": "text",
+                            "properties": {
+                              "content": {
+                                "reference": "${store.name}",
+                                "value": "Название магазина"
+                              },
+                              "variant": "subtitle"
+                            },
+                            "style": {
+                              "fontSize": "17px",
+                              "fontWeight": 600,
+                              "color": "#000000"
+                            }
+                          },
+                          {
+                            "id": "text-store-rating",
+                            "type": "text",
+                            "properties": {
+                              "content": {
+                                "reference": "${'⭐ ' + str(store.rating)}",
+                                "value": "⭐ 4.8"
+                              },
+                              "variant": "caption"
+                            },
+                            "style": {
+                              "fontSize": "13px",
+                              "color": "#8E8E93",
+                              "marginLeft": "4px"
+                            }
+                          }
+                        ]
+                      },
+                      {
+                        "id": "list-cart-items",
+                        "type": "list",
+                        "properties": {
+                          "variant": "unordered",
+                          "spacing": 12,
+                          "items": {
+                            "reference": "${store.items}",
+                            "value": []
+                          },
+                          "itemAlias": "cartItem"
+                        },
+                        "style": {
+                          "listStyleType": "none",
+                          "padding": 0,
+                          "margin": 0,
+                          "display": "flex",
+                          "flexDirection": "column",
+                          "gap": "12px"
+                        },
+                        "children": [
+                          {
+                            "id": "row-cart-item",
+                            "type": "row",
+                            "properties": {
+                              "spacing": 12,
+                              "alignItems": "flex-start",
+                              "padding": 12,
+                              "background": "#ffffff"
+                            },
+                            "style": {
+                              "borderRadius": "0px"
+                            },
+                            "children": [
+                              {
+                                "id": "checkbox-item",
+                                "type": "checkbox",
+                                "properties": {
+                                  "checked": {
+                                    "reference": "${cartItem.selected}",
+                                    "value": true
+                                  },
+                                  "event": "toggle_item",
+                                  "eventParams": {
+                                    "target_advertisement_id": {
+                                      "reference": "${cartItem.advertisement_id}",
+                                      "value": "item-1"
+                                    }
+                                  }
+                                },
+                                "style": {
+                                  "width": "20px",
+                                  "height": "20px",
+                                  "marginTop": "30px"
+                                }
+                              },
+                              {
+                                "id": "image-item",
+                                "type": "image",
+                                "properties": {
+                                  "src": {
+                                    "reference": "${cartItem.image}",
+                                    "value": "https://via.placeholder.com/80x80"
+                                  },
+                                  "alt": {
+                                    "reference": "${cartItem.title}",
+                                    "value": "Товар"
+                                  },
+                                  "width": 80,
+                                  "height": 80
+                                },
+                                "style": {
+                                  "borderRadius": "12px",
+                                  "objectFit": "cover",
+                                  "opacity": {
+                                    "reference": "${'0.5' if cartItem.advertisement_id in inactive_product_ids else '1.0'}",
+                                    "value": "1.0"
+                                  }
+                                }
+                              },
+                              {
+                                "id": "column-item-details",
+                                "type": "column",
+                                "properties": {
+                                  "spacing": 8,
+                                  "flex": 1
+                                },
+                                "children": [
+                                  {
+                                    "id": "row-item-price",
+                                    "type": "row",
+                                    "properties": {
+                                      "spacing": 8,
+                                      "alignItems": "baseline",
+                                      "justifyContent": "space-between"
+                                    },
+                                    "children": [
+                                      {
+                                        "id": "text-item-price",
+                                        "type": "text",
+                                        "properties": {
+                                          "content": {
+                                            "reference": "${cartItem.price + ' ₽'}",
+                                            "value": "4 990 ₽"
+                                          },
+                                          "variant": "heading"
+                                        },
+                                        "style": {
+                                          "fontSize": "17px",
+                                          "fontWeight": 600,
+                                          "color": {
+                                            "reference": "${'#8E8E93' if cartItem.advertisement_id in inactive_product_ids else '#000000'}",
+                                            "value": "#000000"
+                                          }
+                                        }
+                                      },
+                                      {
+                                        "id": "button-favorite",
+                                        "type": "button",
+                                        "properties": {
+                                          "text": "♡",
+                                          "variant": "icon",
+                                          "event": "toggle_favorite"
+                                        },
+                                        "style": {
+                                          "fontSize": "20px",
+                                          "color": "#8E8E93",
+                                          "background": "transparent",
+                                          "border": "none",
+                                          "padding": "0"
+                                        }
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "id": "row-item-title-container",
+                                    "type": "row",
+                                    "properties": {
+                                      "spacing": 8,
+                                      "alignItems": "center"
+                                    },
+                                    "children": [
+                                      {
+                                        "id": "text-item-title",
+                                        "type": "text",
+                                        "properties": {
+                                          "content": {
+                                            "reference": "${cartItem.title}",
+                                            "value": "Название товара"
+                                          },
+                                          "variant": "body"
+                                        },
+                                        "style": {
+                                          "fontSize": "13px",
+                                          "fontWeight": 400,
+                                          "color": "#000000",
+                                          "lineHeight": "18px"
+                                        }
+                                      },
+                                      {
+                                        "id": "badge-inactive",
+                                        "type": "text",
+                                        "properties": {
+                                          "content": {
+                                            "reference": "${'Недоступен' if cartItem.advertisement_id in inactive_product_ids else ''}",
+                                            "value": ""
+                                          },
+                                          "variant": "caption"
+                                        },
+                                        "style": {
+                                          "fontSize": "11px",
+                                          "fontWeight": 600,
+                                          "color": "#FF3B30",
+                                          "backgroundColor": "#FFEBE9",
+                                          "padding": "2px 8px",
+                                          "borderRadius": "4px",
+                                          "display": {
+                                            "reference": "${'inline-block' if cartItem.advertisement_id in inactive_product_ids else 'none'}",
+                                            "value": "none"
+                                          }
+                                        }
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "id": "row-item-actions",
+                                    "type": "row",
+                                    "properties": {
+                                      "spacing": 12,
+                                      "alignItems": "center",
+                                      "justifyContent": "space-between"
+                                    },
+                                    "children": [
+                                      {
+                                        "id": "row-quantity-controls",
+                                        "type": "row",
+                                        "properties": {
+                                          "spacing": 12,
+                                          "alignItems": "center"
+                                        },
+                                        "children": [
+                                          {
+                                            "id": "button-decrement",
+                                            "type": "button",
+                                            "properties": {
+                                              "text": "−",
+                                              "variant": "secondary",
+                                              "event": "remove_item",
+                                              "eventParams": {
+                                                "target_advertisement_id": {
+                                                  "reference": "${cartItem.advertisement_id}",
+                                                  "value": "item-1"
+                                                }
+                                              }
+                                            },
+                                            "style": {
+                                              "width": "28px",
+                                              "height": "28px",
+                                              "borderRadius": "50%",
+                                              "background": "#F2F2F7",
+                                              "color": "#000000",
+                                              "fontSize": "18px",
+                                              "border": "none",
+                                              "display": "flex",
+                                              "alignItems": "center",
+                                              "justifyContent": "center"
+                                            }
+                                          },
+                                          {
+                                            "id": "text-item-quantity",
+                                            "type": "text",
+                                            "properties": {
+                                              "content": {
+                                                "reference": "${cartItem.quantity}",
+                                                "value": "1"
+                                              },
+                                              "variant": "body"
+                                            },
+                                            "style": {
+                                              "fontSize": "17px",
+                                              "fontWeight": 400,
+                                              "color": "#000000",
+                                              "minWidth": "20px",
+                                              "textAlign": "center"
+                                            }
+                                          },
+                                          {
+                                            "id": "button-increment",
+                                            "type": "button",
+                                            "properties": {
+                                              "text": "+",
+                                              "variant": "secondary",
+                                              "event": "add_item",
+                                              "eventParams": {
+                                                "target_advertisement_id": {
+                                                  "reference": "${cartItem.advertisement_id}",
+                                                  "value": "item-1"
+                                                }
+                                              }
+                                            },
+                                            "style": {
+                                              "width": "28px",
+                                              "height": "28px",
+                                              "borderRadius": "50%",
+                                              "background": "#F2F2F7",
+                                              "color": "#000000",
+                                              "fontSize": "18px",
+                                              "border": "none",
+                                              "display": "flex",
+                                              "alignItems": "center",
+                                              "justifyContent": "center"
+                                            }
+                                          }
+                                        ]
+                                      },
+                                      {
+                                        "id": "button-delete",
+                                        "type": "button",
+                                        "properties": {
+                                          "text": "🗑",
+                                          "variant": "icon",
+                                          "event": "remove_item",
+                                          "eventParams": {
+                                            "target_advertisement_id": {
+                                              "reference": "${cartItem.advertisement_id}",
+                                              "value": "item-1"
+                                            }
+                                          }
+                                        },
+                                        "style": {
+                                          "fontSize": "18px",
+                                          "color": "#8E8E93",
+                                          "background": "transparent",
+                                          "border": "none",
+                                          "padding": "0"
+                                        }
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "id": "text-delivery",
+                                    "type": "text",
+                                    "properties": {
+                                      "content": "Купить с доставкой",
+                                      "variant": "caption"
+                                    },
+                                    "style": {
+                                      "fontSize": "13px",
+                                      "color": "#A933FF",
+                                      "fontWeight": 400
+                                    }
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "footer": {
+            "id": "section-cart-footer",
+            "type": "Section",
+            "properties": {
+              "slot": "footer",
+              "padding": 16,
+              "spacing": 0,
+              "background": "#ffffff"
+            },
+            "style": {
+              "borderTop": "1px solid #E5E5E5",
+              "boxShadow": "0 -2px 8px rgba(0, 0, 0, 0.08)",
+              "position": "fixed",
+              "bottom": 0,
+              "width": "100%",
+              "zIndex": 100
+            },
+            "children": [
+              {
+                "id": "row-footer-content",
+                "type": "row",
+                "properties": {
+                  "spacing": 16,
+                  "alignItems": "center",
+                  "justifyContent": "space-between"
+                },
+                "style": {
+                  "width": "100%"
+                },
+                "children": [
+                  {
+                    "id": "column-total",
+                    "type": "column",
+                    "properties": {
+                      "spacing": 2,
+                      "alignItems": "flex-start"
+                    },
+                    "children": [
+                      {
+                        "id": "text-item-count",
+                        "type": "text",
+                        "properties": {
+                          "content": {
+                            "reference": "${str(cart_snapshot.summary.total_items) + ' товара'}",
+                            "value": "3 товара"
+                          },
+                          "variant": "caption"
+                        },
+                        "style": {
+                          "fontSize": "13px",
+                          "fontWeight": 400,
+                          "color": "#8E8E93"
+                        }
+                      },
+                      {
+                        "id": "text-total-price",
+                        "type": "text",
+                        "properties": {
+                          "content": {
+                            "reference": "${str(cart_snapshot.summary.total) + ' ₽'}",
+                            "value": "120 979 ₽"
+                          },
+                          "variant": "heading"
+                        },
+                        "style": {
+                          "fontSize": "24px",
+                          "fontWeight": 700,
+                          "color": "#000000",
+                          "lineHeight": "1.2"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "id": "button-checkout",
+                    "type": "button",
+                    "properties": {
+                      "text": "Оформить доставку",
+                      "variant": "primary",
+                      "event": "checkout"
+                    },
+                    "style": {
+                      "height": "48px",
+                      "paddingLeft": "24px",
+                      "paddingRight": "24px",
+                      "borderRadius": "8px",
+                      "background": "#A933FF",
+                      "color": "#ffffff",
+                      "fontSize": "16px",
+                      "fontWeight": 600,
+                      "border": "none",
+                      "boxShadow": "none"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "state_type": "technical",
+      "name": "ResetCheckoutError",
+      "transitions": [
+        {
+          "variable": "checkout_reset_done",
+          "case": "True",
+          "state_id": "FetchPaymentMethods"
+        }
+      ],
+      "expressions": [
+        {
+          "variable": "checkout_error",
+          "dependent_variables": [],
+          "expression": "{'error': False}"
+        },
+        {
+          "variable": "checkout_error_flag",
+          "dependent_variables": [],
+          "expression": "'False'"
+        },
+        {
+          "variable": "checkout_reset_done",
+          "dependent_variables": [],
+          "expression": "'True'"
+        }
+      ],
+      "initial_state": false,
+      "final_state": false
+    },
+    {
+      "state_type": "integration",
+      "name": "AddItemToCart",
+      "transitions": [
+        {
+          "variable": "add_item_response",
+          "case": null,
+          "state_id": "AddItemResultDecision"
+        }
+      ],
+      "expressions": [
+        {
+          "variable": "add_item_response",
+          "url": "{{base_url}}/carts/add-advertisement",
+          "body": {
+            "cart_id": "{{cart_id}}",
+            "advertisement_id": "{{target_advertisement_id}}"
+          },
+          "method": "post",
+          "dependent_variables": [
+            "base_url",
+            "cart_id",
+            "target_advertisement_id"
+          ],
+          "error_variable": "cart_operation_error"
+        }
+      ],
+      "initial_state": false,
+      "final_state": false
+    },
+    {
+      "state_type": "technical",
+      "name": "AddItemResultDecision",
+      "transitions": [
+        {
+          "variable": "cart_operation_error_flag",
+          "case": "True",
+          "state_id": "CartOperationErrorScreen"
+        },
+        {
+          "variable": "cart_operation_error_flag",
+          "case": "False",
+          "state_id": "MarkItemAdded"
+        }
+      ],
+      "expressions": [
+        {
+          "variable": "cart_operation_error_flag",
+          "dependent_variables": [
+            "cart_operation_error"
+          ],
+          "expression": "cart_operation_error and cart_operation_error['error'] == True"
+        }
+      ],
+      "initial_state": false,
+      "final_state": false
+    },
+    {
+      "state_type": "integration",
+      "name": "RemoveItemFromCart",
+      "transitions": [
+        {
+          "variable": "remove_item_response",
+          "case": null,
+          "state_id": "RemoveItemResultDecision"
+        }
+      ],
+      "expressions": [
+        {
+          "variable": "remove_item_response",
+          "url": "{{base_url}}/carts/{{cart_id}}/advertisements/{{target_advertisement_id}}",
+          "params": {},
+          "method": "delete",
+          "dependent_variables": [
+            "base_url",
+            "cart_id",
+            "target_advertisement_id"
+          ],
+          "error_variable": "cart_operation_error"
+        }
+      ],
+      "initial_state": false,
+      "final_state": false
+    },
+    {
+      "state_type": "technical",
+      "name": "RemoveItemResultDecision",
+      "transitions": [
+        {
+          "variable": "cart_operation_error_flag",
+          "case": "True",
+          "state_id": "CartOperationErrorScreen"
+        },
+        {
+          "variable": "cart_operation_error_flag",
+          "case": "False",
+          "state_id": "MarkItemRemoved"
+        }
+      ],
+      "expressions": [
+        {
+          "variable": "cart_operation_error_flag",
+          "dependent_variables": [
+            "cart_operation_error"
+          ],
+          "expression": "cart_operation_error and cart_operation_error['error'] == True"
+        }
+      ],
+      "initial_state": false,
+      "final_state": false
+    },
+    {
+      "state_type": "technical",
+      "name": "MarkItemAdded",
+      "transitions": [
+        {
+          "variable": "mark_added_done",
+          "case": "True",
+          "state_id": "FetchCartSnapshot"
+        }
+      ],
+      "expressions": [
+        {
+          "variable": "last_operation",
+          "dependent_variables": [],
+          "expression": "'added'"
+        },
+        {
+          "variable": "last_operation_message",
+          "dependent_variables": [],
+          "expression": "'Товар добавлен в корзину'"
+        },
+        {
+          "variable": "selected_items_count",
+          "dependent_variables": [
+            "selected_items_count"
+          ],
+          "expression": "selected_items_count + 1"
+        },
+        {
+          "variable": "cart_operation_error_flag",
+          "dependent_variables": [],
+          "expression": "'False'"
+        },
+        {
+          "variable": "mark_added_done",
+          "dependent_variables": [],
+          "expression": "'True'"
+        }
+      ],
+      "initial_state": false,
+      "final_state": false
+    },
+    {
+      "state_type": "technical",
+      "name": "MarkItemRemoved",
+      "transitions": [
+        {
+          "variable": "mark_removed_done",
+          "case": "True",
+          "state_id": "FetchCartSnapshot"
+        }
+      ],
+      "expressions": [
+        {
+          "variable": "last_operation",
+          "dependent_variables": [],
+          "expression": "'removed'"
+        },
+        {
+          "variable": "last_removed_advertisement_id",
+          "dependent_variables": [
+            "target_advertisement_id"
+          ],
+          "expression": "target_advertisement_id"
+        },
+        {
+          "variable": "last_operation_message",
+          "dependent_variables": [],
+          "expression": "'Товар удалён из корзины'"
+        },
+        {
+          "variable": "selected_items_count",
+          "dependent_variables": [
+            "selected_items_count"
+          ],
+          "expression": "selected_items_count - 1 if selected_items_count > 0 else 0"
+        },
+        {
+          "variable": "cart_operation_error_flag",
+          "dependent_variables": [],
+          "expression": "'False'"
+        },
+        {
+          "variable": "mark_removed_done",
+          "dependent_variables": [],
+          "expression": "'True'"
+        }
+      ],
+      "initial_state": false,
+      "final_state": false
+    },
+    {
+      "state_type": "integration",
+      "name": "ClearCart",
+      "transitions": [
+        {
+          "variable": "clear_cart_response",
+          "case": null,
+          "state_id": "CartClearDecision"
+        }
+      ],
+      "expressions": [
+        {
+          "variable": "clear_cart_response",
+          "url": "{{base_url}}/carts/{{cart_id}}",
+          "params": {},
+          "method": "delete",
+          "dependent_variables": [
+            "base_url",
+            "cart_id"
+          ],
+          "error_variable": "cart_operation_error"
+        }
+      ],
+      "initial_state": false,
+      "final_state": false
+    },
+    {
+      "state_type": "technical",
+      "name": "CartClearDecision",
+      "transitions": [
+        {
+          "variable": "cart_operation_error_flag",
+          "case": "True",
+          "state_id": "CartOperationErrorScreen"
+        },
+        {
+          "variable": "cart_operation_error_flag",
+          "case": "False",
+          "state_id": "CartClearedMarker"
+        }
+      ],
+      "expressions": [
+        {
+          "variable": "cart_operation_error_flag",
+          "dependent_variables": [
+            "cart_operation_error"
+          ],
+          "expression": "cart_operation_error and cart_operation_error['error'] == True"
+        }
+      ],
+      "initial_state": false,
+      "final_state": false
+    },
+    {
+      "state_type": "technical",
+      "name": "CartClearedMarker",
+      "transitions": [
+        {
+          "variable": "cart_cleared_done",
+          "case": "True",
+          "state_id": "FetchCartSnapshot"
+        }
+      ],
+      "expressions": [
+        {
+          "variable": "last_operation",
+          "dependent_variables": [],
+          "expression": "'cleared'"
+        },
+        {
+          "variable": "last_operation_message",
+          "dependent_variables": [],
+          "expression": "'Корзина очищена'"
+        },
+        {
+          "variable": "selected_items_count",
+          "dependent_variables": [],
+          "expression": "0"
+        },
+        {
+          "variable": "cart_operation_error_flag",
+          "dependent_variables": [],
+          "expression": "'False'"
+        },
+        {
+          "variable": "cart_cleared_done",
+          "dependent_variables": [],
+          "expression": "'True'"
+        }
+      ],
+      "initial_state": false,
+      "final_state": false
+    },
+    {
+      "state_type": "technical",
+      "name": "ToggleSelectionState",
+      "transitions": [
+        {
+          "variable": "toggle_processed",
+          "case": "True",
+          "state_id": "CartOverviewScreen"
+        }
+      ],
+      "expressions": [
+        {
+          "variable": "toggle_processed",
+          "dependent_variables": [],
+          "expression": "'True'"
+        }
+      ],
+      "initial_state": false,
+      "final_state": false
+    },
+    {
+      "state_type": "integration",
+      "name": "FetchPaymentMethods",
+      "transitions": [
+        {
+          "variable": "payment_methods",
+          "case": null,
+          "state_id": "FetchShippingMethods"
+        }
+      ],
+      "expressions": [
+        {
+          "variable": "payment_methods",
+          "url": "{{base_url}}/payment-methods",
+          "params": {},
+          "method": "get",
+          "dependent_variables": [
+            "base_url"
+          ],
+          "error_variable": "checkout_error"
+        }
+      ],
+      "initial_state": false,
+      "final_state": false
+    },
+    {
+      "state_type": "integration",
+      "name": "FetchShippingMethods",
+      "transitions": [
+        {
+          "variable": "shipping_methods",
+          "case": null,
+          "state_id": "CheckoutDataDecision"
+        }
+      ],
+      "expressions": [
+        {
+          "variable": "shipping_methods",
+          "url": "{{base_url}}/shipping-methods",
+          "params": {},
+          "method": "get",
+          "dependent_variables": [
+            "base_url"
+          ],
+          "error_variable": "checkout_error"
+        }
+      ],
+      "initial_state": false,
+      "final_state": false
+    },
+    {
+      "state_type": "technical",
+      "name": "CheckoutDataDecision",
+      "transitions": [
+        {
+          "variable": "checkout_error_flag",
+          "case": "True",
+          "state_id": "CheckoutErrorScreen"
+        },
+        {
+          "variable": "checkout_error_flag",
+          "case": "False",
+          "state_id": "CheckoutSummaryScreen"
+        }
+      ],
+      "expressions": [
+        {
+          "variable": "checkout_error_flag",
+          "dependent_variables": [
+            "checkout_error"
+          ],
+          "expression": "checkout_error and checkout_error['error'] == True"
+        }
+      ],
+      "initial_state": false,
+      "final_state": false
+    },
+    {
+      "state_type": "screen",
+      "name": "CheckoutSummaryScreen",
+      "transitions": [
+        {
+          "case": "confirm_checkout",
+          "state_id": "ResetCheckoutErrorBeforeCreate"
+        },
+        {
+          "case": "back_to_cart",
+          "state_id": "CartOverviewScreen"
+        },
+        {
+          "case": "choose_delivery",
+          "state_id": "DeliveryMethodsScreen"
+        },
+        {
+          "case": "edit_recipient",
+          "state_id": "EditRecipientScreen"
+        },
+        {
+          "case": "select_payment_method",
+          "state_id": "ApplyPaymentSelection"
+        }
+      ],
+      "expressions": [
+        {
+          "event_name": "confirm_checkout"
+        },
+        {
+          "event_name": "back_to_cart"
+        },
+        {
+          "event_name": "choose_delivery"
+        },
+        {
+          "event_name": "edit_recipient"
+        },
+        {
+          "event_name": "select_payment_method"
+        }
+      ],
+      "initial_state": false,
+      "final_state": false,
+      "screen": {
+        "type": "modal",
+        "title": "Оформление доставки",
+        "description": "Для адреса {{cart_snapshot.delivery.address}}",
+        "sections": [
+          {
+            "type": "card",
+            "title": "Способ получения",
+            "subtitle": "{{selected_shipping_method_name}}",
+            "badge": {
+              "text": "{{selected_shipping_method_eta}}"
+            },
+            "description": "{{selected_shipping_method_price}} ₽",
+            "actions": [
+              {
+                "label": "Изменить",
+                "event": "choose_delivery"
+              }
+            ]
+          },
+          {
+            "type": "card",
+            "title": "Получатель",
+            "subtitle": "{{recipient_name}}",
+            "fields": [
+              {
+                "label": "Телефон",
+                "value": "{{recipient_phone}}"
+              },
+              {
+                "label": "Почта",
+                "value": "{{recipient_email}}"
+              }
+            ],
+            "actions": [
+              {
+                "label": "Изменить",
+                "event": "edit_recipient"
+              }
+            ]
+          },
+          {
+            "title": "Способ оплаты",
+            "items": {
+              "source": "payment_methods",
+              "template": {
+                "title": "{{item.name}}",
+                "media": {
+                  "thumbnail": "{{item.image}}"
+                },
+                "selected": "{{item.id == selected_payment_method}}",
+                "actions": [
+                  {
+                    "label": "Выбрать",
+                    "event": "select_payment_method",
+                    "context": {
+                      "new_payment_method_id": "{{item.id}}",
+                      "new_payment_method_name": "{{item.name}}"
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "title": "Pear Store",
+            "subtitle": "{{cart_snapshot.stores[0].delivery_description}}",
+            "items": {
+              "source": "cart_snapshot.stores[0].items",
+              "template": {
+                "title": "{{item.title}}",
+                "subtitle": "{{item.subtitle}}",
+                "price": {
+                  "value": "{{item.price}}",
+                  "currency": "₽"
+                },
+                "description": "{{item.description}}"
+              }
+            }
+          },
+          {
+            "title": "TECHNO ZONE",
+            "subtitle": "{{cart_snapshot.stores[1].delivery_description}}",
+            "items": {
+              "source": "cart_snapshot.stores[1].items",
+              "template": {
+                "title": "{{item.title}}",
+                "subtitle": "{{item.subtitle}}",
+                "price": {
+                  "value": "{{item.price}}",
+                  "currency": "₽"
+                },
+                "description": "{{item.description}}"
+              }
+            }
+          }
+        ],
+        "summary": {
+          "total": "{{cart_snapshot.summary.total}} ₽",
+          "sub_total": "{{cart_snapshot.summary.subtotal}} ₽",
+          "delivery": "{{selected_shipping_method_price}} ₽",
+          "discount": "-{{cart_snapshot.summary.discount}} ₽",
+          "payment": "{{selected_payment_method_name}}"
+        },
+        "actions": [
+          {
+            "id": "confirm_checkout",
+            "label": "Подтвердить заказ",
+            "type": "primary",
+            "event": "confirm_checkout"
+          },
+          {
+            "id": "back_to_cart",
+            "label": "Вернуться в корзину",
+            "type": "secondary",
+            "event": "back_to_cart"
+          }
+        ]
+      }
+    },
+    {
+      "state_type": "technical",
+      "name": "ApplyPaymentSelection",
+      "transitions": [
+        {
+          "variable": "payment_selection_applied",
+          "case": "True",
+          "state_id": "CheckoutSummaryScreen"
+        }
+      ],
+      "expressions": [
+        {
+          "variable": "selected_payment_method",
+          "dependent_variables": [
+            "new_payment_method_id"
+          ],
+          "expression": "new_payment_method_id"
+        },
+        {
+          "variable": "selected_payment_method_name",
+          "dependent_variables": [
+            "new_payment_method_name"
+          ],
+          "expression": "new_payment_method_name"
+        },
+        {
+          "variable": "payment_selection_applied",
+          "dependent_variables": [],
+          "expression": "'True'"
+        }
+      ],
+      "initial_state": false,
+      "final_state": false
+    },
+    {
+      "state_type": "screen",
+      "name": "DeliveryMethodsScreen",
+      "transitions": [
+        {
+          "case": "select_delivery_method",
+          "state_id": "ApplyDeliverySelection"
+        },
+        {
+          "case": "close_modal",
+          "state_id": "CheckoutSummaryScreen"
+        }
+      ],
+      "expressions": [
+        {
+          "event_name": "select_delivery_method"
+        },
+        {
+          "event_name": "close_modal"
+        }
+      ],
+      "initial_state": false,
+      "final_state": false,
+      "screen": {
+        "type": "modal",
+        "title": "Способ получения",
+        "description": "Выберите подходящий вариант доставки",
+        "sections": [
+          {
+            "title": "Доступные варианты",
+            "items": {
+              "source": "shipping_methods",
+              "template": {
+                "title": "{{item.name}}",
+                "subtitle": "{{item.price}} ₽ · {{item.deliveryTime}}",
+                "description": "{{item.description}}",
+                "actions": [
+                  {
+                    "label": "Выбрать",
+                    "event": "select_delivery_method",
+                    "context": {
+                      "new_shipping_method_id": "{{item.id}}",
+                      "new_shipping_method_name": "{{item.name}}",
+                      "new_shipping_method_price": "{{item.price}}",
+                      "new_shipping_method_eta": "{{item.deliveryTime}}"
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        ],
+        "actions": [
+          {
+            "id": "close_modal",
+            "label": "Отменить",
+            "type": "secondary",
+            "event": "close_modal"
+          }
+        ]
+      }
+    },
+    {
+      "state_type": "technical",
+      "name": "ApplyDeliverySelection",
+      "transitions": [
+        {
+          "variable": "delivery_selection_applied",
+          "case": "True",
+          "state_id": "CheckoutSummaryScreen"
+        }
+      ],
+      "expressions": [
+        {
+          "variable": "selected_shipping_method",
+          "dependent_variables": [
+            "new_shipping_method_id"
+          ],
+          "expression": "new_shipping_method_id"
+        },
+        {
+          "variable": "selected_shipping_method_name",
+          "dependent_variables": [
+            "new_shipping_method_name"
+          ],
+          "expression": "new_shipping_method_name"
+        },
+        {
+          "variable": "selected_shipping_method_price",
+          "dependent_variables": [
+            "new_shipping_method_price"
+          ],
+          "expression": "new_shipping_method_price"
+        },
+        {
+          "variable": "selected_shipping_method_eta",
+          "dependent_variables": [
+            "new_shipping_method_eta"
+          ],
+          "expression": "new_shipping_method_eta"
+        },
+        {
+          "variable": "delivery_selection_applied",
+          "dependent_variables": [],
+          "expression": "'True'"
+        }
+      ],
+      "initial_state": false,
+      "final_state": false
+    },
+    {
+      "state_type": "screen",
+      "name": "EditRecipientScreen",
+      "transitions": [
+        {
+          "case": "save_recipient",
+          "state_id": "SaveRecipientInfo"
+        },
+        {
+          "case": "close_modal",
+          "state_id": "CheckoutSummaryScreen"
+        }
+      ],
+      "expressions": [
+        {
+          "event_name": "save_recipient"
+        },
+        {
+          "event_name": "close_modal"
+        }
+      ],
+      "initial_state": false,
+      "final_state": false,
+      "screen": {
+        "type": "modal",
+        "title": "Получатель",
+        "description": "Уточните данные получателя",
+        "fields": [
+          {
+            "type": "text_input",
+            "label": "ФИО",
+            "value": "{{recipient_name}}",
+            "placeholder": "Иван Иванов",
+            "name": "new_recipient_name"
+          },
+          {
+            "type": "phone_input",
+            "label": "Телефон",
+            "value": "{{recipient_phone}}",
+            "placeholder": "+7 000 000-00-00",
+            "name": "new_recipient_phone"
+          },
+          {
+            "type": "text_input",
+            "label": "Почта",
+            "value": "{{recipient_email}}",
+            "placeholder": "user@example.com",
+            "name": "new_recipient_email"
+          }
+        ],
+        "actions": [
+          {
+            "id": "save_recipient",
+            "label": "Сохранить",
+            "type": "primary",
+            "event": "save_recipient"
+          },
+          {
+            "id": "close_modal",
+            "label": "Отменить",
+            "type": "secondary",
+            "event": "close_modal"
+          }
+        ]
+      }
+    },
+    {
+      "state_type": "technical",
+      "name": "SaveRecipientInfo",
+      "transitions": [
+        {
+          "variable": "recipient_saved",
+          "case": "True",
+          "state_id": "CheckoutSummaryScreen"
+        }
+      ],
+      "expressions": [
+        {
+          "variable": "recipient_name",
+          "dependent_variables": [
+            "new_recipient_name"
+          ],
+          "expression": "new_recipient_name"
+        },
+        {
+          "variable": "recipient_phone",
+          "dependent_variables": [
+            "new_recipient_phone"
+          ],
+          "expression": "new_recipient_phone"
+        },
+        {
+          "variable": "recipient_email",
+          "dependent_variables": [
+            "new_recipient_email"
+          ],
+          "expression": "new_recipient_email"
+        },
+        {
+          "variable": "recipient_saved",
+          "dependent_variables": [],
+          "expression": "'True'"
+        }
+      ],
+      "initial_state": false,
+      "final_state": false
+    },
+    {
+      "state_type": "technical",
+      "name": "ResetCheckoutErrorBeforeCreate",
+      "transitions": [
+        {
+          "variable": "checkout_create_reset_done",
+          "case": "True",
+          "state_id": "CreateOrder"
+        }
+      ],
+      "expressions": [
+        {
+          "variable": "checkout_error",
+          "dependent_variables": [],
+          "expression": "{'error': False}"
+        },
+        {
+          "variable": "checkout_error_flag",
+          "dependent_variables": [],
+          "expression": "'False'"
+        },
+        {
+          "variable": "checkout_create_reset_done",
+          "dependent_variables": [],
+          "expression": "'True'"
+        }
+      ],
+      "initial_state": false,
+      "final_state": false
+    },
+    {
+      "state_type": "integration",
+      "name": "CreateOrder",
+      "transitions": [
+        {
+          "variable": "order_created",
+          "case": null,
+          "state_id": "CheckoutCreateDecision"
+        }
+      ],
+      "expressions": [
+        {
+          "variable": "order_created",
+          "url": "{{base_url}}/ships",
+          "body": {
+            "name": "Заказ для {{cart_snapshot.user.first_name}}",
+            "shipping_method_id": "{{selected_shipping_method}}",
+            "payment_method_id": "{{selected_payment_method}}",
+            "receiver_id": "{{user_id}}",
+            "owner_id": "{{cart_snapshot.user.id}}",
+            "address": "{{cart_snapshot.delivery.address}}"
+          },
+          "method": "post",
+          "dependent_variables": [
+            "base_url",
+            "selected_shipping_method",
+            "selected_payment_method",
+            "user_id"
+          ],
+          "error_variable": "checkout_error"
+        }
+      ],
+      "initial_state": false,
+      "final_state": false
+    },
+    {
+      "state_type": "technical",
+      "name": "CheckoutCreateDecision",
+      "transitions": [
+        {
+          "variable": "checkout_error_flag",
+          "case": "True",
+          "state_id": "CheckoutErrorScreen"
+        },
+        {
+          "variable": "checkout_error_flag",
+          "case": "False",
+          "state_id": "CheckoutSuccessScreen"
+        }
+      ],
+      "expressions": [
+        {
+          "variable": "checkout_error_flag",
+          "dependent_variables": [
+            "checkout_error"
+          ],
+          "expression": "checkout_error and checkout_error['error'] == True"
+        }
+      ],
+      "initial_state": false,
+      "final_state": false
+    },
+    {
+      "state_type": "screen",
+      "name": "CheckoutSuccessScreen",
+      "transitions": [
+        {
+          "case": "back_to_cart",
+          "state_id": "FetchCartSnapshot"
+        },
+        {
+          "case": "exit",
+          "state_id": "CartFarewellScreen"
+        }
+      ],
+      "expressions": [
+        {
+          "event_name": "back_to_cart"
+        },
+        {
+          "event_name": "exit"
+        }
+      ],
+      "initial_state": false,
+      "final_state": false,
+      "screen": {
+        "id": "screen-checkout-success",
+        "type": "Screen",
+        "name": "Заказ оформлен",
+        "style": {
+          "display": "flex",
+          "flexDirection": "column",
+          "minHeight": "400px",
+          "backgroundColor": "#F5F5F5",
+          "alignItems": "center",
+          "justifyContent": "center",
+          "padding": "32px"
+        },
+        "sections": {
+          "body": {
+            "id": "section-success-body",
+            "type": "Section",
+            "properties": {
+              "slot": "body",
+              "padding": 24,
+              "spacing": 16,
+              "alignItems": "center"
+            },
+            "style": {
+              "flex": "1 1 auto",
+              "textAlign": "center"
+            },
+            "children": [
+              {
+                "id": "text-icon",
+                "type": "text",
+                "properties": {
+                  "content": "✓",
+                  "variant": "display"
+                },
+                "style": {
+                  "fontSize": "64px",
+                  "color": "#34C759",
+                  "marginBottom": "16px"
+                }
+              },
+              {
+                "id": "text-title",
+                "type": "text",
+                "properties": {
+                  "content": "Заказ оформлен",
+                  "variant": "heading"
+                },
+                "style": {
+                  "fontSize": "24px",
+                  "fontWeight": 700,
+                  "color": "#000000",
+                  "marginBottom": "8px"
+                }
+              },
+              {
+                "id": "text-message",
+                "type": "text",
+                "properties": {
+                  "content": {
+                    "reference": "${'Мы отправили подтверждение на ' + cart_snapshot.user.email}",
+                    "value": "Мы отправили подтверждение на email"
+                  },
+                  "variant": "body"
+                },
+                "style": {
+                  "fontSize": "15px",
+                  "color": "#8E8E93",
+                  "marginBottom": "24px"
+                }
+              },
+              {
+                "id": "column-details",
+                "type": "column",
+                "properties": {
+                  "spacing": 12,
+                  "padding": 16,
+                  "background": "#ffffff"
+                },
+                "style": {
+                  "borderRadius": "12px",
+                  "width": "100%",
+                  "marginBottom": "24px"
+                },
+                "children": [
+                  {
+                    "id": "row-total",
+                    "type": "row",
+                    "properties": {
+                      "spacing": 8,
+                      "justifyContent": "space-between"
+                    },
+                    "children": [
+                      {
+                        "id": "text-total-label",
+                        "type": "text",
+                        "properties": {
+                          "content": "Итого",
+                          "variant": "body"
+                        },
+                        "style": {
+                          "fontSize": "15px",
+                          "color": "#8E8E93"
+                        }
+                      },
+                      {
+                        "id": "text-total-value",
+                        "type": "text",
+                        "properties": {
+                          "content": {
+                            "reference": "${str(cart_snapshot.summary.total) + ' ₽'}",
+                            "value": "120 979 ₽"
+                          },
+                          "variant": "body"
+                        },
+                        "style": {
+                          "fontSize": "15px",
+                          "fontWeight": 600,
+                          "color": "#000000"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "id": "row-delivery",
+                    "type": "row",
+                    "properties": {
+                      "spacing": 8,
+                      "justifyContent": "space-between"
+                    },
+                    "children": [
+                      {
+                        "id": "text-delivery-label",
+                        "type": "text",
+                        "properties": {
+                          "content": "Способ доставки",
+                          "variant": "body"
+                        },
+                        "style": {
+                          "fontSize": "15px",
+                          "color": "#8E8E93"
+                        }
+                      },
+                      {
+                        "id": "text-delivery-value",
+                        "type": "text",
+                        "properties": {
+                          "content": {
+                            "reference": "${cart_snapshot.delivery.name}",
+                            "value": "Курьер"
+                          },
+                          "variant": "body"
+                        },
+                        "style": {
+                          "fontSize": "15px",
+                          "fontWeight": 600,
+                          "color": "#000000"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "id": "row-payment",
+                    "type": "row",
+                    "properties": {
+                      "spacing": 8,
+                      "justifyContent": "space-between"
+                    },
+                    "children": [
+                      {
+                        "id": "text-payment-label",
+                        "type": "text",
+                        "properties": {
+                          "content": "Способ оплаты",
+                          "variant": "body"
+                        },
+                        "style": {
+                          "fontSize": "15px",
+                          "color": "#8E8E93"
+                        }
+                      },
+                      {
+                        "id": "text-payment-value",
+                        "type": "text",
+                        "properties": {
+                          "content": {
+                            "reference": "${selected_payment_method_name}",
+                            "value": "СБП"
+                          },
+                          "variant": "body"
+                        },
+                        "style": {
+                          "fontSize": "15px",
+                          "fontWeight": 600,
+                          "color": "#000000"
+                        }
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "id": "button-back",
+                "type": "button",
+                "properties": {
+                  "text": "Вернуться в корзину",
+                  "variant": "primary",
+                  "event": "back_to_cart"
+                },
+                "style": {
+                  "width": "100%",
+                  "height": "48px",
+                  "borderRadius": "12px",
+                  "background": "#007AFF",
+                  "color": "#ffffff",
+                  "fontSize": "16px",
+                  "fontWeight": 600,
+                  "border": "none",
+                  "marginBottom": "12px"
+                }
+              },
+              {
+                "id": "button-exit",
+                "type": "button",
+                "properties": {
+                  "text": "Завершить",
+                  "variant": "secondary",
+                  "event": "exit"
+                },
+                "style": {
+                  "width": "100%",
+                  "height": "48px",
+                  "borderRadius": "12px",
+                  "background": "#F2F2F7",
+                  "color": "#000000",
+                  "fontSize": "16px",
+                  "fontWeight": 400,
+                  "border": "none"
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "state_type": "screen",
+      "name": "CheckoutErrorScreen",
+      "transitions": [
+        {
+          "case": "retry",
+          "state_id": "FetchPaymentMethods"
+        },
+        {
+          "case": "back",
+          "state_id": "CartOverviewScreen"
+        }
+      ],
+      "expressions": [
+        {
+          "event_name": "retry"
+        },
+        {
+          "event_name": "back"
+        }
+      ],
+      "initial_state": false,
+      "final_state": false,
+      "screen": {
+        "id": "screen-checkout-error",
+        "type": "Screen",
+        "name": "Ошибка при оформлении",
+        "style": {
+          "display": "flex",
+          "flexDirection": "column",
+          "minHeight": "400px",
+          "backgroundColor": "#F5F5F5",
+          "alignItems": "center",
+          "justifyContent": "center",
+          "padding": "32px"
+        },
+        "sections": {
+          "body": {
+            "id": "section-error-body",
+            "type": "Section",
+            "properties": {
+              "slot": "body",
+              "padding": 24,
+              "spacing": 16,
+              "alignItems": "center"
+            },
+            "style": {
+              "flex": "1 1 auto",
+              "textAlign": "center"
+            },
+            "children": [
+              {
+                "id": "text-icon",
+                "type": "text",
+                "properties": {
+                  "content": "⚠",
+                  "variant": "display"
+                },
+                "style": {
+                  "fontSize": "64px",
+                  "color": "#FF3B30",
+                  "marginBottom": "16px"
+                }
+              },
+              {
+                "id": "text-title",
+                "type": "text",
+                "properties": {
+                  "content": "Ошибка при оформлении",
+                  "variant": "heading"
+                },
+                "style": {
+                  "fontSize": "24px",
+                  "fontWeight": 700,
+                  "color": "#000000",
+                  "marginBottom": "8px"
+                }
+              },
+              {
+                "id": "text-message",
+                "type": "text",
+                "properties": {
+                  "content": {
+                    "reference": "${checkout_error.message if checkout_error else 'Произошла ошибка'}",
+                    "value": "Произошла ошибка"
+                  },
+                  "variant": "body"
+                },
+                "style": {
+                  "fontSize": "15px",
+                  "color": "#8E8E93",
+                  "marginBottom": "16px"
+                }
+              },
+              {
+                "id": "column-details",
+                "type": "column",
+                "properties": {
+                  "spacing": 8,
+                  "padding": 16,
+                  "background": "#ffffff"
+                },
+                "style": {
+                  "borderRadius": "12px",
+                  "width": "100%",
+                  "marginBottom": "24px"
+                },
+                "children": [
+                  {
+                    "id": "text-detail-1",
+                    "type": "text",
+                    "properties": {
+                      "content": "Проверьте данные для доставки и попробуйте снова",
+                      "variant": "body"
+                    },
+                    "style": {
+                      "fontSize": "13px",
+                      "color": "#8E8E93",
+                      "textAlign": "left"
+                    }
+                  },
+                  {
+                    "id": "text-detail-2",
+                    "type": "text",
+                    "properties": {
+                      "content": "Если ошибка повторяется, свяжитесь с поддержкой",
+                      "variant": "body"
+                    },
+                    "style": {
+                      "fontSize": "13px",
+                      "color": "#8E8E93",
+                      "textAlign": "left"
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "button-retry",
+                "type": "button",
+                "properties": {
+                  "text": "Попробовать снова",
+                  "variant": "primary",
+                  "event": "retry"
+                },
+                "style": {
+                  "width": "100%",
+                  "height": "48px",
+                  "borderRadius": "12px",
+                  "background": "#007AFF",
+                  "color": "#ffffff",
+                  "fontSize": "16px",
+                  "fontWeight": 600,
+                  "border": "none",
+                  "marginBottom": "12px"
+                }
+              },
+              {
+                "id": "button-back",
+                "type": "button",
+                "properties": {
+                  "text": "Вернуться",
+                  "variant": "secondary",
+                  "event": "back"
+                },
+                "style": {
+                  "width": "100%",
+                  "height": "48px",
+                  "borderRadius": "12px",
+                  "background": "#F2F2F7",
+                  "color": "#000000",
+                  "fontSize": "16px",
+                  "fontWeight": 400,
+                  "border": "none"
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "state_type": "screen",
+      "name": "CartNetworkErrorScreen",
+      "transitions": [
+        {
+          "case": "retry",
+          "state_id": "FetchCartSnapshot"
+        },
+        {
+          "case": "load_saved",
+          "state_id": "CartOverviewScreen"
+        }
+      ],
+      "expressions": [
+        {
+          "event_name": "retry"
+        },
+        {
+          "event_name": "load_saved"
+        }
+      ],
+      "initial_state": false,
+      "final_state": false,
+      "screen": {
+        "id": "screen-cart-network-error",
+        "type": "Screen",
+        "name": "Не удалось получить корзину",
+        "style": {
+          "display": "flex",
+          "flexDirection": "column",
+          "minHeight": "400px",
+          "backgroundColor": "#F5F5F5",
+          "alignItems": "center",
+          "justifyContent": "center",
+          "padding": "32px"
+        },
+        "sections": {
+          "body": {
+            "id": "section-network-error-body",
+            "type": "Section",
+            "properties": {
+              "slot": "body",
+              "padding": 24,
+              "spacing": 16,
+              "alignItems": "center"
+            },
+            "style": {
+              "flex": "1 1 auto",
+              "textAlign": "center"
+            },
+            "children": [
+              {
+                "id": "text-icon",
+                "type": "text",
+                "properties": {
+                  "content": "📶",
+                  "variant": "display"
+                },
+                "style": {
+                  "fontSize": "64px",
+                  "marginBottom": "16px",
+                  "opacity": 0.5
+                }
+              },
+              {
+                "id": "text-title",
+                "type": "text",
+                "properties": {
+                  "content": "Не удалось получить корзину",
+                  "variant": "heading"
+                },
+                "style": {
+                  "fontSize": "20px",
+                  "fontWeight": 700,
+                  "color": "#000000",
+                  "marginBottom": "8px"
+                }
+              },
+              {
+                "id": "text-message",
+                "type": "text",
+                "properties": {
+                  "content": "Проверьте подключение или попробуйте снова",
+                  "variant": "body"
+                },
+                "style": {
+                  "fontSize": "15px",
+                  "color": "#8E8E93",
+                  "marginBottom": "24px"
+                }
+              },
+              {
+                "id": "button-retry",
+                "type": "button",
+                "properties": {
+                  "text": "Повторить",
+                  "variant": "primary",
+                  "event": "retry"
+                },
+                "style": {
+                  "width": "100%",
+                  "height": "48px",
+                  "borderRadius": "12px",
+                  "background": "#007AFF",
+                  "color": "#ffffff",
+                  "fontSize": "16px",
+                  "fontWeight": 600,
+                  "border": "none",
+                  "marginBottom": "12px"
+                }
+              },
+              {
+                "id": "button-load-saved",
+                "type": "button",
+                "properties": {
+                  "text": "Открыть сохранённую версию",
+                  "variant": "secondary",
+                  "event": "load_saved"
+                },
+                "style": {
+                  "width": "100%",
+                  "height": "48px",
+                  "borderRadius": "12px",
+                  "background": "#F2F2F7",
+                  "color": "#000000",
+                  "fontSize": "16px",
+                  "fontWeight": 400,
+                  "border": "none"
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "state_type": "screen",
+      "name": "CartOperationErrorScreen",
+      "transitions": [
+        {
+          "case": "back",
+          "state_id": "CartOverviewScreen"
+        },
+        {
+          "case": "retry",
+          "state_id": "FetchCartSnapshot"
+        }
+      ],
+      "expressions": [
+        {
+          "event_name": "back"
+        },
+        {
+          "event_name": "retry"
+        }
+      ],
+      "initial_state": false,
+      "final_state": false,
+      "screen": {
+        "id": "screen-cart-operation-error",
+        "type": "Screen",
+        "name": "Операция не выполнена",
+        "style": {
+          "display": "flex",
+          "flexDirection": "column",
+          "minHeight": "400px",
+          "backgroundColor": "#F5F5F5",
+          "alignItems": "center",
+          "justifyContent": "center",
+          "padding": "32px"
+        },
+        "sections": {
+          "body": {
+            "id": "section-operation-error-body",
+            "type": "Section",
+            "properties": {
+              "slot": "body",
+              "padding": 24,
+              "spacing": 16,
+              "alignItems": "center"
+            },
+            "style": {
+              "flex": "1 1 auto",
+              "textAlign": "center"
+            },
+            "children": [
+              {
+                "id": "text-icon",
+                "type": "text",
+                "properties": {
+                  "content": "⚠️",
+                  "variant": "display"
+                },
+                "style": {
+                  "fontSize": "64px",
+                  "marginBottom": "16px"
+                }
+              },
+              {
+                "id": "text-title",
+                "type": "text",
+                "properties": {
+                  "content": "Операция не выполнена",
+                  "variant": "heading"
+                },
+                "style": {
+                  "fontSize": "20px",
+                  "fontWeight": 700,
+                  "color": "#000000",
+                  "marginBottom": "8px"
+                }
+              },
+              {
+                "id": "text-message",
+                "type": "text",
+                "properties": {
+                  "content": {
+                    "reference": "${cart_operation_error.message if cart_operation_error else 'Произошла ошибка'}",
+                    "value": "Произошла ошибка"
+                  },
+                  "variant": "body"
+                },
+                "style": {
+                  "fontSize": "15px",
+                  "color": "#8E8E93",
+                  "marginBottom": "16px"
+                }
+              },
+              {
+                "id": "column-details",
+                "type": "column",
+                "properties": {
+                  "spacing": 8,
+                  "padding": 16,
+                  "background": "#ffffff"
+                },
+                "style": {
+                  "borderRadius": "12px",
+                  "width": "100%",
+                  "marginBottom": "24px"
+                },
+                "children": [
+                  {
+                    "id": "text-detail-1",
+                    "type": "text",
+                    "properties": {
+                      "content": "Попробуйте выполнить действие позже",
+                      "variant": "body"
+                    },
+                    "style": {
+                      "fontSize": "13px",
+                      "color": "#8E8E93",
+                      "textAlign": "left"
+                    }
+                  },
+                  {
+                    "id": "text-detail-2",
+                    "type": "text",
+                    "properties": {
+                      "content": "Проверьте, что товар ещё доступен",
+                      "variant": "body"
+                    },
+                    "style": {
+                      "fontSize": "13px",
+                      "color": "#8E8E93",
+                      "textAlign": "left"
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "button-retry",
+                "type": "button",
+                "properties": {
+                  "text": "Обновить корзину",
+                  "variant": "primary",
+                  "event": "retry"
+                },
+                "style": {
+                  "width": "100%",
+                  "height": "48px",
+                  "borderRadius": "12px",
+                  "background": "#007AFF",
+                  "color": "#ffffff",
+                  "fontSize": "16px",
+                  "fontWeight": 600,
+                  "border": "none",
+                  "marginBottom": "12px"
+                }
+              },
+              {
+                "id": "button-back",
+                "type": "button",
+                "properties": {
+                  "text": "Вернуться",
+                  "variant": "secondary",
+                  "event": "back"
+                },
+                "style": {
+                  "width": "100%",
+                  "height": "48px",
+                  "borderRadius": "12px",
+                  "background": "#F2F2F7",
+                  "color": "#000000",
+                  "fontSize": "16px",
+                  "fontWeight": 400,
+                  "border": "none"
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "state_type": "screen",
+      "name": "CartEmptyScreen",
+      "transitions": [
+        {
+          "case": "open_catalog",
+          "state_id": "CartFarewellScreen"
+        },
+        {
+          "case": "reload",
+          "state_id": "FetchCartSnapshot"
+        }
+      ],
+      "expressions": [
+        {
+          "event_name": "open_catalog"
+        },
+        {
+          "event_name": "reload"
+        }
+      ],
+      "initial_state": false,
+      "final_state": false,
+      "screen": {
+        "id": "screen-cart-empty",
+        "type": "Screen",
+        "name": "В корзине пусто",
+        "style": {
+          "display": "flex",
+          "flexDirection": "column",
+          "minHeight": "500px",
+          "backgroundColor": "#F5F5F5",
+          "alignItems": "center",
+          "justifyContent": "center",
+          "padding": "32px"
+        },
+        "sections": {
+          "body": {
+            "id": "section-empty-body",
+            "type": "Section",
+            "properties": {
+              "slot": "body",
+              "padding": 24,
+              "spacing": 16,
+              "alignItems": "center"
+            },
+            "style": {
+              "flex": "1 1 auto",
+              "textAlign": "center"
+            },
+            "children": [
+              {
+                "id": "text-icon",
+                "type": "text",
+                "properties": {
+                  "content": "🛒",
+                  "variant": "display"
+                },
+                "style": {
+                  "fontSize": "80px",
+                  "marginBottom": "24px",
+                  "opacity": 0.5
+                }
+              },
+              {
+                "id": "text-title",
+                "type": "text",
+                "properties": {
+                  "content": "В корзине пусто",
+                  "variant": "heading"
+                },
+                "style": {
+                  "fontSize": "24px",
+                  "fontWeight": 700,
+                  "color": "#000000",
+                  "marginBottom": "8px"
+                }
+              },
+              {
+                "id": "text-message",
+                "type": "text",
+                "properties": {
+                  "content": {
+                    "reference": "${'Добавьте товары из списка желаний или перейдите в каталог. Доступно ' + str(recommended_products_count) + ' актуальных предложений.'}",
+                    "value": "Добавьте товары из списка желаний или перейдите в каталог"
+                  },
+                  "variant": "body"
+                },
+                "style": {
+                  "fontSize": "15px",
+                  "color": "#8E8E93",
+                  "marginBottom": "32px",
+                  "maxWidth": "300px",
+                  "lineHeight": "1.4"
+                }
+              },
+              {
+                "id": "button-catalog",
+                "type": "button",
+                "properties": {
+                  "text": "Перейти в каталог",
+                  "variant": "primary",
+                  "event": "open_catalog"
+                },
+                "style": {
+                  "width": "100%",
+                  "height": "48px",
+                  "borderRadius": "12px",
+                  "background": "#007AFF",
+                  "color": "#ffffff",
+                  "fontSize": "16px",
+                  "fontWeight": 600,
+                  "border": "none",
+                  "marginBottom": "12px"
+                }
+              },
+              {
+                "id": "button-reload",
+                "type": "button",
+                "properties": {
+                  "text": "Обновить",
+                  "variant": "secondary",
+                  "event": "reload"
+                },
+                "style": {
+                  "width": "100%",
+                  "height": "48px",
+                  "borderRadius": "12px",
+                  "background": "#F2F2F7",
+                  "color": "#000000",
+                  "fontSize": "16px",
+                  "fontWeight": 400,
+                  "border": "none"
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "state_type": "screen",
+      "name": "CartFarewellScreen",
+      "transitions": [],
+      "expressions": [],
+      "initial_state": false,
+      "final_state": true,
+      "screen": {
+        "id": "screen-cart-farewell",
+        "type": "Screen",
+        "name": "Спасибо!",
+        "style": {
+          "display": "flex",
+          "flexDirection": "column",
+          "minHeight": "300px",
+          "backgroundColor": "#F5F5F5",
+          "alignItems": "center",
+          "justifyContent": "center",
+          "padding": "32px"
+        },
+        "sections": {
+          "body": {
+            "id": "section-farewell-body",
+            "type": "Section",
+            "properties": {
+              "slot": "body",
+              "padding": 24,
+              "spacing": 16,
+              "alignItems": "center"
+            },
+            "style": {
+              "flex": "1 1 auto",
+              "textAlign": "center"
+            },
+            "children": [
+              {
+                "id": "text-icon",
+                "type": "text",
+                "properties": {
+                  "content": "👋",
+                  "variant": "display"
+                },
+                "style": {
+                  "fontSize": "64px",
+                  "marginBottom": "16px"
+                }
+              },
+              {
+                "id": "text-title",
+                "type": "text",
+                "properties": {
+                  "content": "Спасибо!",
+                  "variant": "heading"
+                },
+                "style": {
+                  "fontSize": "32px",
+                  "fontWeight": 700,
+                  "color": "#000000",
+                  "marginBottom": "8px"
+                }
+              },
+              {
+                "id": "text-message",
+                "type": "text",
+                "properties": {
+                  "content": "Возвращайтесь за новыми покупками",
+                  "variant": "body"
+                },
+                "style": {
+                  "fontSize": "17px",
+                  "color": "#8E8E93"
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "predefined_context": {
+    "base_url": "https://sandkittens.me/backservices/api",
+    "user_id": 14,
+    "cart_id": 3,
+    "selected_items": [
+      4,
+      5,
+      6
+    ],
+    "selected_payment_method": 1,
+    "selected_payment_method_name": "СБП",
+    "selected_shipping_method": 1,
+    "selected_shipping_method_name": "Курьер, Pear Store",
+    "selected_shipping_method_price": "0",
+    "selected_shipping_method_eta": "2 дня",
+    "selected_items_count": 3,
+    "recipient_name": "Екатерина Батюшкова",
+    "recipient_phone": "+7 999 100-10-10",
+    "recipient_email": "catherinee@gmail.com",
+    "cart_snapshot_error": {
+      "error": false
+    },
+    "cart_operation_error": {
+      "error": false
+    },
+    "cart_operation_error_flag": false,
+    "checkout_error": {
+      "error": false
+    },
+    "checkout_error_flag": false,
+    "last_operation": "",
+    "last_operation_message": "",
+    "last_removed_advertisement_id": 0,
+    "stores_catalog_error": {
+      "error": false
+    },
+    "stores_catalog_error_flag": false,
+    "stores_catalog_source": "fallback",
+    "stores_catalog_fallback": [
+      {
+        "id": 201,
+        "name": "Pear Store",
+        "rating": 4.8,
+        "delivery": "Доставка завтра",
+        "logo": "https://cdn.avito.ru/cart/store-pear.png",
+        "category": "Электроника",
+        "slogan": "Техника, которая радует"
+      },
+      {
+        "id": 202,
+        "name": "Gadget Lab",
+        "rating": 4.7,
+        "delivery": "Самовывоз сегодня",
+        "logo": "https://cdn.avito.ru/cart/store-gadget.png",
+        "category": "Гаджеты",
+        "slogan": "Лучшие аксессуары к вашим устройствам"
+      },
+      {
+        "id": 203,
+        "name": "Smart Home Shop",
+        "rating": 4.9,
+        "delivery": "Курьер за 2 часа",
+        "logo": "https://cdn.avito.ru/cart/store-smart.png",
+        "category": "Умный дом",
+        "slogan": "Все для удобства дома"
+      }
+    ],
+    "stores_catalog": [
+      {
+        "id": 201,
+        "name": "Pear Store",
+        "rating": 4.8,
+        "delivery": "Доставка завтра",
+        "logo": "https://cdn.avito.ru/cart/store-pear.png",
+        "category": "Электроника",
+        "slogan": "Техника, которая радует"
+      },
+      {
+        "id": 202,
+        "name": "Gadget Lab",
+        "rating": 4.7,
+        "delivery": "Самовывоз сегодня",
+        "logo": "https://cdn.avito.ru/cart/store-gadget.png",
+        "category": "Гаджеты",
+        "slogan": "Лучшие аксессуары к вашим устройствам"
+      },
+      {
+        "id": 203,
+        "name": "Smart Home Shop",
+        "rating": 4.9,
+        "delivery": "Курьер за 2 часа",
+        "logo": "https://cdn.avito.ru/cart/store-smart.png",
+        "category": "Умный дом",
+        "slogan": "Все для удобства дома"
+      }
+    ],
+    "recommended_products_error": {
+      "error": false
+    },
+    "recommended_products_error_flag": false,
+    "recommended_products_source": "fallback",
+    "inactive_product_ids": [
+      3,
+      5
+    ],
+    "recommended_products_fallback": [
+      {
+        "id": 801,
+        "advertisement_id": 8,
+        "title": "Smart Home Hub",
+        "price": 12990,
+        "currency": "₽",
+        "image": "https://cdn.avito.ru/cart/items/hub.png",
+        "store": "Smart Home Shop",
+        "tagline": "Управляйте домом с одного устройства"
+      },
+      {
+        "id": 802,
+        "advertisement_id": 9,
+        "title": "MagSafe PowerBank",
+        "price": 4990,
+        "currency": "₽",
+        "image": "https://cdn.avito.ru/cart/items/powerbank.png",
+        "store": "Gadget Lab",
+        "tagline": "Заряжайте iPhone где угодно"
+      },
+      {
+        "id": 803,
+        "advertisement_id": 10,
+        "title": "Earbuds Lite",
+        "price": 7990,
+        "currency": "₽",
+        "image": "https://cdn.avito.ru/cart/items/earbuds.png",
+        "store": "Pear Store",
+        "tagline": "Компактные наушники с ANC"
+      }
+    ],
+    "recommended_products": [
+      {
+        "id": 801,
+        "advertisement_id": 8,
+        "title": "Smart Home Hub",
+        "price": 12990,
+        "currency": "₽",
+        "image": "https://cdn.avito.ru/cart/items/hub.png",
+        "store": "Smart Home Shop",
+        "tagline": "Управляйте домом с одного устройства"
+      },
+      {
+        "id": 802,
+        "advertisement_id": 9,
+        "title": "MagSafe PowerBank",
+        "price": 4990,
+        "currency": "₽",
+        "image": "https://cdn.avito.ru/cart/items/powerbank.png",
+        "store": "Gadget Lab",
+        "tagline": "Заряжайте iPhone где угодно"
+      },
+      {
+        "id": 803,
+        "advertisement_id": 10,
+        "title": "Earbuds Lite",
+        "price": 7990,
+        "currency": "₽",
+        "image": "https://cdn.avito.ru/cart/items/earbuds.png",
+        "store": "Pear Store",
+        "tagline": "Компактные наушники с ANC"
+      }
+    ],
+    "recommended_products_count": 3,
+    "cart_snapshot": {
+      "stores": [
+        {
+          "id": 14,
+          "name": "Pear Store",
+          "rating": 4.8,
+          "delivery_description": "Доставка в пункт выдачи за 2 дня",
+          "items": [
+            {
+              "id": "ps-airpods",
+              "title": "AirPods Pro 2",
+              "subtitle": "Активное шумоподавление",
+              "description": "Беспроводные наушники с MagSafe",
+              "price": 25990,
+              "old_price": 27990,
+              "quantity": 1,
+              "advertisement_id": 4,
+              "image": "https://cdn.avito.ru/cart/airpods.png",
+              "selected": true
+            },
+            {
+              "id": "ps-watch",
+              "title": "Apple Watch 10",
+              "subtitle": "42мм Blue",
+              "description": "С ремешком Alpine Loop",
+              "price": 45990,
+              "old_price": 48990,
+              "quantity": 1,
+              "advertisement_id": 5,
+              "image": "https://cdn.avito.ru/cart/watch.png",
+              "selected": true
+            }
+          ]
+        },
+        {
+          "id": 15,
+          "name": "TECHNO ZONE",
+          "rating": 4.6,
+          "delivery_description": "Самовывоз завтра",
+          "items": [
+            {
+              "id": "tz-iphone",
+              "title": "iPhone 16 Pro",
+              "subtitle": "256 ГБ",
+              "description": "Графитовый, MagSafe",
+              "price": 98990,
+              "old_price": 101990,
+              "quantity": 1,
+              "advertisement_id": 6,
+              "image": "https://cdn.avito.ru/cart/iphone.png",
+              "selected": true
+            }
+          ]
+        }
+      ],
+      "advertisements": [
+        {
+          "advertisement": {
+            "id": 4,
+            "name": "AirPods Pro 2",
+            "price": 25990,
+            "description": "Беспроводные наушники с ANC"
+          },
+          "quantity": 1
+        },
+        {
+          "advertisement": {
+            "id": 5,
+            "name": "Apple Watch 10",
+            "price": 45990,
+            "description": "С ремешком Alpine Loop"
+          },
+          "quantity": 1
+        },
+        {
+          "advertisement": {
+            "id": 6,
+            "name": "iPhone 16 Pro",
+            "price": 98990,
+            "description": "Графитовый, 256 ГБ"
+          },
+          "quantity": 1
+        }
+      ],
+      "summary": {
+        "total": 120979,
+        "selected_total": 120979,
+        "discount": 3000,
+        "subtotal": 123979,
+        "total_items": 3
+      },
+      "delivery": {
+        "name": "Курьер, Pear Store",
+        "price": 0,
+        "address": "Москва, ул. Лесная, 7"
+      },
+      "user": {
+        "id": 14,
+        "first_name": "Екатерина",
+        "last_name": "Батюшкова",
+        "email": "catherinee@gmail.com",
+        "phone": "+7 999 100-10-10"
+      }
+    }
+  }
+}

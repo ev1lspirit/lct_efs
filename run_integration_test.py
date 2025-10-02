@@ -8,6 +8,8 @@ import requests
 import json
 import time
 from typing import Optional
+
+import pytest
 from api.test_integration_workflow import (
     test_integration_states_complete,
     get_test_scenarios
@@ -16,6 +18,23 @@ from api.test_integration_workflow import (
 
 BASE_URL = "http://localhost:8080"
 SESSION_ID = f"integration-test-{int(time.time())}"
+
+
+@pytest.fixture(scope="module")
+def workflow_id():
+    """Provision a workflow on the backend or skip tests if API недоступно."""
+    try:
+        response = requests.get(f"{BASE_URL}/", timeout=5)
+        response.raise_for_status()
+    except requests.exceptions.RequestException as exc:  # pragma: no cover - network dependent
+        pytest.skip(f"Workflow API недоступно по адресу {BASE_URL}: {exc}")
+
+    workflow = test_integration_states_complete()
+    wf_id = save_workflow(workflow)
+    if not wf_id:
+        pytest.skip("Не удалось сохранить workflow через API – тесты пропущены")
+
+    return wf_id
 
 
 def print_section(title):

@@ -109,9 +109,23 @@ def prepare_context_response(context: dict):
         for k, v in context.items()
     }
 
+def _convert_bools_to_str(obj):
+    """Recursively convert all bool and None values to strings in nested structures."""
+    if obj is None:
+        return "None"
+    elif isinstance(obj, bool):
+        return str(obj)
+    elif isinstance(obj, dict):
+        return {k: _convert_bools_to_str(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [_convert_bools_to_str(item) for item in obj]
+    else:
+        return obj
+
 def dump_context(context_data: dict) -> dict:
     """
     Dumps the context data to a JSON-serializable format.
+    Converts all boolean and None values (including nested ones) to strings for Redis compatibility.
 
     Args:
         context_data (dict): The context data to dump.
@@ -123,8 +137,17 @@ def dump_context(context_data: dict) -> dict:
     for key, value in context_data.items():
         if isinstance(key, (bytes, bytearray)):
             key = key.decode()
-        if isinstance(value, (dict, list)):
+        
+        # Skip None values at top level or convert to string
+        if value is None:
+            dumped_context[key] = "None"
+        elif isinstance(value, (dict, list)):
+            # Convert bools and None recursively before JSON serialization
+            value = _convert_bools_to_str(value)
             dumped_context[key] = json.dumps(value)
+        elif isinstance(value, bool):
+            # Convert bool to string for Redis compatibility
+            dumped_context[key] = str(value)
         else:
             dumped_context[key] = value.decode() if isinstance(value, (bytes, bytearray)) else value
     return dumped_context
