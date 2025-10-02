@@ -171,7 +171,7 @@ class Automaton:
                             logger.info(f"Result type: {type(result).__name__}, value: {result}")
                         logger.info(f"About to save to context['{variable}']")
                     else:
-                        # Для technical states сохраняем результат как есть (не преобразуем в строку)
+                        # For technical states, save the result as is (do not convert to string)
                         result = expression.result()
                     
                     logger.info(f"Setting context['{variable}'] = {type(result).__name__}")

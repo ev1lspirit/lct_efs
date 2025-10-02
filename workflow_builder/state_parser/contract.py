@@ -33,7 +33,7 @@ class IntegrationExpressionModel(BaseModel):
     
     @model_validator(mode='after')
     def validate_params_or_body(self):
-        """Валидация: GET/DELETE должны использовать params, POST/PUT/PATCH должны использовать body"""
+        """Validation: GET/DELETE should use params, POST/PUT/PATCH should use body"""
         method = self.method.lower()
         
         if method in ['get', 'delete']:
