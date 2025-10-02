@@ -1,0 +1,181 @@
+@startuml SysML Sequence Diagram - Event Processing Flow
+!theme blueprint
+
+title SysML Sequence Diagram - Client Event Processing Flow
+
+actor "Client App" as Client
+participant "API Router" as API
+participant "Automaton" as Auto
+participant "SessionContext" as Context
+participant "WorkflowState" as State
+participant "ScreenHandler" as Handler
+participant "Transition" as Trans
+participant "RedisCache" as Redis
+participant "MongoDBClient" as Mongo
+
+== Инициализация Workflow ==
+
+Client -> API : POST /client/workflow\n{workflow_id, session_id, context}
+activate API
+
+API -> Redis : get_session(session_id)
+activate Redis
+Redis --> API : None (новая сессия)
+deactivate Redis
+
+API -> Context : SessionContext(session_id)
+activate Context
+
+API -> Mongo : find_workflow(workflow_id)
+activate Mongo
+Mongo --> API : workflow_definition
+deactivate Mongo
+
+API -> Auto : Automaton(session_id, workflow_id)
+activate Auto
+
+Auto -> Mongo : load_workflow()
+Auto -> State : parse_initial_state()
+activate State
+State --> Auto : initial_state
+deactivate State
+
+Auto -> Context : save initial context
+Context -> Redis : save_session()
+activate Redis
+Redis --> Context : OK
+deactivate Redis
+
+Auto -> Auto : check state type
+Auto --> API : screen_payload
+deactivate Auto
+
+API --> Client : {session_id, screen, context, state}
+deactivate API
+
+== Отправка События от Клиента ==
+
+Client -> API : POST /client/workflow\n{session_id, event_name: "search", context}
+activate API
+
+API -> Redis : get_session(session_id)
+activate Redis
+Redis --> API : session_data
+deactivate Redis
+
+API -> Context : SessionContext.from_cache(session_id)
+activate Context
+
+API -> Auto : Automaton(session_id, workflow_id)
+activate Auto
+
+Auto -> State : get current_state
+activate State
+
+Auto -> Auto : run(event_name="search")
+
+== Обработка События ==
+
+Auto -> Auto : _evaluate_executables(event_name)
+
+loop for each expression in state.executables
+  Auto -> Handler : ScreenHandler.result(event_name)
+  activate Handler
+  
+  Handler -> Handler : check if event_name\nmatches metadata.event_name
+  
+  alt Event Matches
+    Handler --> Auto : True
+  else Event Does Not Match
+    Handler --> Auto : False
+  end
+  deactivate Handler
+  
+  Auto -> Context : context[event_name] = result
+  Context -> Context : update session dict
+end
+
+== Поиск Перехода ==
+
+Auto -> Auto : _get_transition_candidates_based_on_event()
+
+Auto -> State : get transitions
+State --> Auto : transition_list
+
+loop for each transition
+  Auto -> Trans : check if event_name in transition.keys
+  activate Trans
+  
+  alt Transition Matches
+    Trans --> Auto : matching_transition
+    deactivate Trans
+    
+    Auto -> Auto : _transit_state(transition)
+    
+    Auto -> Mongo : load next state
+    activate Mongo
+    Mongo --> Auto : next_state_definition
+    deactivate Mongo
+    
+    Auto -> State : parse next state
+    State --> Auto : next_state instance
+  end
+end
+
+deactivate State
+
+== Сохранение Состояния ==
+
+Auto -> Auto : _call_state_checkpoint()
+
+Auto -> Context : save updated context
+activate Context
+Context -> Redis : save_session(session_id, context)
+activate Redis
+Redis --> Context : OK
+deactivate Redis
+deactivate Context
+
+== Проверка Типа Состояния ==
+
+Auto -> State : check state.type_
+
+alt Screen State
+  Auto -> State : get screen payload
+  activate State
+  State --> Auto : screen_definition
+  deactivate State
+  
+  Auto --> API : {session_id, screen, context, state}
+  
+else Technical State
+  Auto -> Auto : continue execution\n(auto-transition)
+  Auto -> Auto : _evaluate_executables()
+  Auto -> Auto : _get_transition_candidates_based_on_expressions()
+  note right: Technical states\nautomatically evaluate\nand transition
+  
+else Integration State
+  Auto -> Handler : IntegrationHandler.result()
+  activate Handler
+  Handler -> "External API" : HTTP request
+  "External API" --> Handler : response
+  Handler --> Auto : api_result
+  deactivate Handler
+  
+  Auto -> Context : context[variable] = api_result
+end
+
+deactivate Auto
+
+API --> Client : {session_id, screen, context, current_state}
+deactivate API
+
+== Финализация ==
+
+note over Client, Mongo
+  Сессия остается активной в Redis
+  для последующих запросов.
+  Контекст сохраняется между вызовами.
+end note
+
+@enduml

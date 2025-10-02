@@ -93,10 +93,19 @@ def prepare_context_response(context: dict):
         context = context.decode()
     if isinstance(context, str):
         return json.loads(context)
+    
+    def safe_decode_value(v):
+        """Safely decode value from Redis - try JSON first, then plain decode"""
+        if v.startswith(b"{") or v.startswith(b"["):
+            try:
+                return json.loads(v)
+            except (json.JSONDecodeError, ValueError):
+                # If JSON parsing fails, return as string
+                return v.decode()
+        return v.decode()
+    
     return {
-        k.decode(): (
-            json.loads(v) if v.startswith(b"{") or v.startswith(b"[") else v.decode()
-        )
+        k.decode(): safe_decode_value(v)
         for k, v in context.items()
     }
 

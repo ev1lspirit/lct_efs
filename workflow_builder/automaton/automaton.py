@@ -145,13 +145,33 @@ class Automaton:
     def _evaluate_executables(self, event_name: str = None):
         with self.session_context as context:
             for expression in self.current_state.executables:
-                variable = expression.metadata.variable
+                # Для screen состояний используем event_name в качестве переменной
+                if self.current_state.type_ == StateTypeEnum.screen:
+                    variable = expression.metadata.event_name
+                else:
+                    variable = expression.metadata.variable
+                
                 try:
-                    result = (
-                        expression.result(event_name)
-                        if self.current_state.type_ == StateTypeEnum.screen
-                        else str(expression.result())
-                    )
+                    if self.current_state.type_ == StateTypeEnum.screen:
+                        result = expression.result(event_name)
+                    elif self.current_state.type_ == StateTypeEnum.integration:
+                        # Для integration states сохраняем JSON-данные ответа API
+                        logger.info(f"Executing integration state for variable: {variable}")
+                        raw_result = expression.result()
+                        logger.debug(f"Integration result type: {type(raw_result).__name__}")
+                        # Проверяем, является ли результат объектом с атрибутами
+                        if hasattr(raw_result, 'content'):
+                            # Это Response объект от API
+                            result = raw_result.content  # Сохраняем JSON содержимое
+                            logger.info(f"Saved API response content to variable '{variable}'")
+                        else:
+                            result = raw_result
+                            logger.info(f"Saved raw result to variable '{variable}'")
+                    else:
+                        # Для technical states преобразуем в строку
+                        result = str(expression.result())
+                    
+                    logger.debug(f"Setting context[{variable}] = {type(result).__name__}")
                     context[variable] = result
                 except Exception as e:
                     raise RuntimeError(
@@ -199,6 +219,8 @@ class Automaton:
                 if on_return:
                     # returns screen data
                     self._call_state_checkpoint()
+                    # Сохраняем контекст перед возвратом экрана
+                    self.session_context.update_session()
                     try:
                         screens_client = MongoDBClient(
                             database=settings.MONGO_DB,

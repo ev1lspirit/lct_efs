@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Workflow Client Demo</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: #f0f0f0;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 500px;
+            margin: 0 auto;
+        }
+
+        .screen-container {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+            min-height: 400px;
+        }
+
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 400px;
+            font-size: 18px;
+            color: #666;
+        }
+
+        .error {
+            padding: 20px;
+            background: #fee;
+            color: #c00;
+            border-radius: 8px;
+            margin: 20px;
+        }
+
+        .debug-panel {
+            margin-top: 20px;
+            padding: 15px;
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .debug-panel h3 {
+            margin-bottom: 10px;
+            font-size: 14px;
+            color: #666;
+        }
+
+        .debug-info {
+            font-family: monospace;
+            font-size: 12px;
+            background: #f5f5f5;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+
+        /* Стили для компонентов */
+        button {
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        button:hover {
+            opacity: 0.8;
+        }
+
+        button:active {
+            transform: scale(0.98);
+        }
+
+        input {
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        input:focus {
+            border-color: #007AFF !important;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div id="screen-container" class="screen-container">
+            <div class="loading">Загрузка...</div>
+        </div>
+        
+        <div class="debug-panel">
+            <h3>Debug Info</h3>
+            <div class="debug-info">
+                <div>Session ID: <span id="session-id">-</span></div>
+                <div>Current State: <span id="current-state">-</span></div>
+                <div>State Type: <span id="state-type">-</span></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class WorkflowClient {
+            constructor(apiBase, workflowId) {
+                this.apiBase = apiBase;
+                this.workflowId = workflowId;
+                this.sessionId = null;
+                this.screen = null;
+                this.context = {};
+                this.currentState = null;
+                this.stateType = null;
+            }
+
+            async init() {
+                try {
+                    const response = await fetch(`${this.apiBase}/client/workflow`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            client_workflow_id: this.workflowId,
+                            client_session_id: `web-session-${Date.now()}`,
+                            context: {}
+                        })
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
+
+                    const data = await response.json();
+                    this.updateState(data);
+                    return data;
+                } catch (error) {
+                    this.showError(`Ошибка инициализации: ${error.message}`);
+                    throw error;
+                }
+            }
+
+            async sendEvent(eventName, eventContext = {}) {
+                try {
+                    const response = await fetch(`${this.apiBase}/client/workflow`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            client_session_id: this.sessionId,
+                            event_name: eventName,
+                            context: eventContext
+                        })
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
+
+                    const data = await response.json();
+                    this.updateState(data);
+                    return data;
+                } catch (error) {
+                    this.showError(`Ошибка отправки события: ${error.message}`);
+                    throw error;
+                }
+            }
+
+            updateState(data) {
+                this.sessionId = data.session_id;
+                this.screen = data.screen;
+                this.context = data.context;
+                this.currentState = data.current_state;
+                this.stateType = data.state_type;
+
+                this.updateDebugInfo();
+                this.renderScreen();
+            }
+
+            updateDebugInfo() {
+                document.getElementById('session-id').textContent = this.sessionId || '-';
+                document.getElementById('current-state').textContent = this.currentState || '-';
+                document.getElementById('state-type').textContent = this.stateType || '-';
+            }
+
+            renderScreen() {
+                const container = document.getElementById('screen-container');
+                container.innerHTML = '';
+
+                if (!this.screen) {
+                    container.innerHTML = '<div class="loading">Нет экрана для отображения</div>';
+                    return;
+                }
+
+                // Применяем стили экрана
+                Object.assign(container.style, this.screen.style);
+
+                // Рендерим секции
+                if (this.screen.sections) {
+                    if (this.screen.sections.header) {
+                        container.appendChild(this.renderSection(this.screen.sections.header));
+                    }
+                    if (this.screen.sections.body) {
+                        container.appendChild(this.renderSection(this.screen.sections.body));
+                    }
+                    if (this.screen.sections.footer) {
+                        container.appendChild(this.renderSection(this.screen.sections.footer));
+                    }
+                }
+            }
+
+            renderSection(section) {
+                const div = document.createElement('div');
+                div.id = section.id;
+                Object.assign(div.style, section.style);
+
+                if (section.children) {
+                    section.children.forEach(child => {
+                        const element = this.renderComponent(child, this.context);
+                        if (element) {
+                            div.appendChild(element);
+                        }
+                    });
+                }
+
+                return div;
+            }
+
+            renderComponent(component, context) {
+                const { type, id, properties, style, children } = component;
+
+                switch (type) {
+                    case 'text':
+                        const span = document.createElement('span');
+                        span.id = id;
+                        span.textContent = this.resolveValue(properties.content, context);
+                        Object.assign(span.style, style);
+                        return span;
+
+                    case 'button':
+                        const button = document.createElement('button');
+                        button.id = id;
+                        button.textContent = properties.text;
+                        Object.assign(button.style, style);
+                        button.onclick = () => {
+                            const params = properties.eventParams || {};
+                            const resolvedParams = {};
+                            
+                            // Resolve eventParams
+                            for (const [key, value] of Object.entries(params)) {
+                                resolvedParams[key] = this.resolveValue(value, context);
+                            }
+                            
+                            this.sendEvent(properties.event, resolvedParams);
+                        };
+                        return button;
+
+                    case 'input':
+                        const input = document.createElement('input');
+                        input.id = id;
+                        input.type = properties.type || 'text';
+                        input.name = properties.name;
+                        input.placeholder = properties.placeholder || '';
+                        input.required = properties.required || false;
+                        
+                        const defaultValue = this.resolveValue(properties.value, context);
+                        if (defaultValue) {
+                            input.value = defaultValue;
+                        }
+                        
+                        Object.assign(input.style, style);
+                        return input;
+
+                    case 'image':
+                        const img = document.createElement('img');
+                        img.id = id;
+                        img.src = this.resolveValue(properties.src, context);
+                        img.alt = this.resolveValue(properties.alt, context) || '';
+                        if (properties.width) img.width = properties.width;
+                        if (properties.height) img.height = properties.height;
+                        Object.assign(img.style, style);
+                        return img;
+
+                    case 'checkbox':
+                        const checkbox = document.createElement('input');
+                        checkbox.id = id;
+                        checkbox.type = 'checkbox';
+                        checkbox.checked = properties.checked || false;
+                        checkbox.onchange = () => {
+                            if (properties.event) {
+                                this.sendEvent(properties.event, {});
+                            }
+                        };
+                        Object.assign(checkbox.style, style);
+                        return checkbox;
+
+                    case 'column':
+                        const column = document.createElement('div');
+                        column.id = id;
+                        Object.assign(column.style, {
+                            display: 'flex',
+                            flexDirection: 'column',
+                            ...style
+                        });
+                        
+                        if (children) {
+                            children.forEach(child => {
+                                const element = this.renderComponent(child, context);
+                                if (element) column.appendChild(element);
+                            });
+                        }
+                        return column;
+
+                    case 'row':
+                        const row = document.createElement('div');
+                        row.id = id;
+                        Object.assign(row.style, {
+                            display: 'flex',
+                            flexDirection: 'row',
+                            ...style
+                        });
+                        
+                        if (children) {
+                            children.forEach(child => {
+                                const element = this.renderComponent(child, context);
+                                if (element) row.appendChild(element);
+                            });
+                        }
+                        return row;
+
+                    case 'list':
+                        const list = document.createElement('ul');
+                        list.id = id;
+                        Object.assign(list.style, style);
+
+                        const items = this.resolveValue(properties.items, context) || [];
+                        const itemAlias = properties.itemAlias || 'item';
+
+                        items.forEach((item, index) => {
+                            const li = document.createElement('li');
+                            
+                            // Создаем контекст для элемента списка
+                            const itemContext = { ...context, [itemAlias]: item };
+
+                            if (children) {
+                                children.forEach(child => {
+                                    const element = this.renderComponent(child, itemContext);
+                                    if (element) li.appendChild(element);
+                                });
+                            }
+
+                            list.appendChild(li);
+                        });
+
+                        return list;
+
+                    default:
+                        console.warn(`Unknown component type: ${type}`);
+                        return null;
+                }
+            }
+
+            resolveValue(value, context) {
+                if (typeof value === 'object' && value !== null && value.reference) {
+                    const path = value.reference.replace('${', '').replace('}', '');
+                    const resolved = this.getNestedValue(context, path);
+                    return resolved !== undefined ? resolved : value.value;
+                }
+                return value;
+            }
+
+            getNestedValue(obj, path) {
+                return path.split('.').reduce((acc, part) => {
+                    if (acc === undefined || acc === null) return undefined;
+                    return acc[part];
+                }, obj);
+            }
+
+            showError(message) {
+                const container = document.getElementById('screen-container');
+                container.innerHTML = `<div class="error">${message}</div>`;
+            }
+        }
+
+        // Инициализация клиента
+        const API_BASE = 'http://localhost:8080';
+        const WORKFLOW_ID = '68de6c82acbc353520543bd1';
+
+        const client = new WorkflowClient(API_BASE, WORKFLOW_ID);
+
+        // Запуск при загрузке страницы
+        window.addEventListener('DOMContentLoaded', async () => {
+            try {
+                await client.init();
+                console.log('Workflow initialized successfully');
+            } catch (error) {
+                console.error('Failed to initialize workflow:', error);
+            }
+        });
+
+        // Глобальный доступ для дебага
+        window.workflowClient = client;
+    </script>
+</body>
+</html>

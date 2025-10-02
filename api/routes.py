@@ -114,12 +114,14 @@ async def check_session(
             session_id=body.client_session_id, workflow_id=body.client_workflow_id
         )
         screen_payload = automaton.run(body.event_name)
+        # Получаем обновленный контекст после выполнения workflow
+        updated_context = redis_cache.get_session(body.client_session_id)
         logger.info(
             f"Successfully processed workflow for session: {body.client_session_id}"
         )
         response: dict[str, Any] = {
             "session_id": body.client_session_id,
-            "context": session_context,
+            "context": updated_context,
             "current_state": automaton.current_state.name,
             "state_type": automaton.current_state.type_.value,
         }

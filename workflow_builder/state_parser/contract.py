@@ -81,6 +81,11 @@ class StateSet(BaseModel):
 
     @model_validator(mode="before")
     def validate_states(cls, values):
+        # Handle both cases: dict with "states" key or direct list
+        if isinstance(values, list):
+            # If values is already a list, wrap it in a dict
+            values = {"states": values}
+        
         states = values.get("states", [])
         if not states:
             return values

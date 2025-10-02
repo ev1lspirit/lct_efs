@@ -1,0 +1,200 @@
+{
+  "states": {
+    "states": [
+      {
+        "state_type": "service",
+        "name": "__service_init",
+        "screen": {},
+        "transitions": [
+          {
+            "case": null,
+            "state_id": "login_screen",
+            "variable": null
+          }
+        ],
+        "expressions": [],
+        "initial_state": true,
+        "events": [],
+        "final_state": false
+      },
+      {
+        "state_type": "screen",
+        "name": "login_screen",
+        "screen": {
+          "title": "Вход в систему",
+          "description": "Введите ваши учетные данные",
+          "fields": [
+            {
+              "name": "username",
+              "type": "text",
+              "label": "Имя пользователя",
+              "required": true,
+              "placeholder": "Введите логин"
+            },
+            {
+              "name": "password",
+              "type": "password",
+              "label": "Пароль",
+              "required": true,
+              "placeholder": "Введите пароль"
+            }
+          ],
+          "buttons": [
+            {
+              "label": "Войти",
+              "action": "submit",
+              "event": "login_submit"
+            }
+          ]
+        },
+        "transitions": [
+          {
+            "case": null,
+            "state_id": "validate_credentials",
+            "variable": null
+          }
+        ],
+        "expressions": [],
+        "initial_state": false,
+        "events": [
+          {
+            "event_name": "login_submit"
+          }
+        ],
+        "final_state": false
+      },
+      {
+        "state_type": "technical",
+        "name": "validate_credentials",
+        "screen": {},
+        "transitions": [
+          {
+            "case": "is_valid == True",
+            "state_id": "call_auth_api",
+            "variable": "is_valid"
+          },
+          {
+            "case": "is_valid == False",
+            "state_id": "error_screen",
+            "variable": "is_valid"
+          }
+        ],
+        "expressions": [
+          {
+            "variable": "is_valid",
+            "dependent_variables": ["username", "password"],
+            "expression": "username != '' and password != '' and len(password) >= 6"
+          }
+        ],
+        "initial_state": false,
+        "events": [],
+        "final_state": false
+      },
+      {
+        "state_type": "integration",
+        "name": "call_auth_api",
+        "screen": {},
+        "transitions": [
+          {
+            "case": "auth_response.status == 200",
+            "state_id": "success_screen",
+            "variable": "auth_response"
+          },
+          {
+            "case": "auth_response.status != 200",
+            "state_id": "error_screen",
+            "variable": "auth_response"
+          }
+        ],
+        "expressions": [
+          {
+            "variable": "auth_response",
+            "url": "https://api.example.com/auth/login",
+            "params": {
+              "username": "{{username}}",
+              "password": "{{password}}"
+            },
+            "method": "post"
+          }
+        ],
+        "initial_state": false,
+        "events": [],
+        "final_state": false
+      },
+      {
+        "state_type": "screen",
+        "name": "success_screen",
+        "screen": {
+          "title": "Успешная авторизация",
+          "description": "Добро пожаловать в систему!",
+          "fields": [],
+          "buttons": [
+            {
+              "label": "Продолжить",
+              "action": "submit",
+              "event": "continue"
+            }
+          ]
+        },
+        "transitions": [],
+        "expressions": [],
+        "initial_state": false,
+        "events": [
+          {
+            "event_name": "continue"
+          }
+        ],
+        "final_state": true
+      },
+      {
+        "state_type": "screen",
+        "name": "error_screen",
+        "screen": {
+          "title": "Ошибка входа",
+          "description": "Неверные учетные данные",
+          "fields": [],
+          "buttons": [
+            {
+              "label": "Попробовать снова",
+              "action": "retry",
+              "event": "retry_login"
+            }
+          ]
+        },
+        "transitions": [
+          {
+            "case": null,
+            "state_id": "login_screen",
+            "variable": null
+          }
+        ],
+        "expressions": [],
+        "initial_state": false,
+        "events": [
+          {
+            "event_name": "retry_login"
+          }
+        ],
+        "final_state": false
+      },
+      {
+        "state_type": "service",
+        "name": "__service_error",
+        "screen": {},
+        "transitions": [],
+        "expressions": [],
+        "initial_state": false,
+        "events": [],
+        "final_state": true
+      }
+    ]
+  },
+  "predefined_context": {
+    "app_name": "My Application",
+    "version": "1.0.0",
+    "locale": "ru",
+    "theme": "light",
+    "max_login_attempts": 3,
+    "session_timeout": 3600
+  }
+}

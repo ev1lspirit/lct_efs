@@ -60,9 +60,22 @@ class GlobalStateParser:
         return states_to_include
 
     def _load_workflow(self) -> list[StateModel]:
+        """Load workflow from cache/MongoDB with detailed error reporting"""
+        logger.debug(f"Loading workflow {self.workflow_id} for state {self.current_state_name}")
         states: list[StateModel] = workflow_cache.get_workflow(self.workflow_id)
         if not states:
-            raise ValueError(f"Workflow {self.workflow_id} not found")
+            error_msg = (
+                f"Workflow {self.workflow_id} not found in MongoDB.\n"
+                f"Possible causes:\n"
+                f"1. Workflow ID is incorrect or doesn't exist\n"
+                f"2. Workflow was not saved using POST /workflow/save endpoint\n"
+                f"3. MongoDB connection issues\n"
+                f"4. Workflow was saved to different database/collection\n\n"
+                f"Check MongoDB collection: states (database: test)"
+            )
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+        logger.info(f"Loaded {len(states)} states for workflow {self.workflow_id}")
         return states
 
     def _parse_entities(self, *, entities, expression_class):

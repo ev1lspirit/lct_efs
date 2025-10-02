@@ -1,0 +1,159 @@
+@startuml SysML State Machine Diagram - Workflow State Lifecycle
+!theme blueprint
+
+title SysML State Machine Diagram - Workflow State Lifecycle
+
+[*] --> WorkflowInitialized : create session
+
+state "Workflow Initialized" as WorkflowInitialized {
+  state "Loading Workflow Definition" as Loading
+  state "Parsing Initial State" as Parsing
+  state "Creating Session Context" as CreateContext
+  
+  [*] --> Loading
+  Loading --> Parsing : workflow found
+  Loading --> [*] : workflow not found\n[ERROR]
+  Parsing --> CreateContext : valid structure
+  Parsing --> [*] : invalid structure\n[ERROR]
+  CreateContext --> [*] : ready
+}
+
+WorkflowInitialized --> StateReady : initialization complete
+
+state "State Ready" as StateReady {
+  [*] --> CheckStateType
+  
+  state "Check State Type" as CheckStateType
+  
+  CheckStateType --> ScreenState : type == screen
+  CheckStateType --> TechnicalState : type == technical
+  CheckStateType --> IntegrationState : type == integration
+  CheckStateType --> ServiceState : type == service
+}
+
+state "Screen State Processing" as ScreenState {
+  state "Waiting for Event" as WaitEvent
+  state "Event Received" as EventReceived
+  state "Validating Event" as ValidateEvent
+  state "Executing Handlers" as ExecHandlers
+  
+  [*] --> WaitEvent
+  WaitEvent --> EventReceived : client sends event
+  EventReceived --> ValidateEvent
+  ValidateEvent --> ExecHandlers : event matches
+  ValidateEvent --> WaitEvent : event doesn't match
+  ExecHandlers --> [*] : handlers complete
+}
+
+state "Technical State Processing" as TechnicalState {
+  state "Evaluating Expressions" as EvalExpr
+  state "Computing Results" as Compute
+  state "Updating Context" as UpdateCtx
+  
+  [*] --> EvalExpr
+  EvalExpr --> Compute : expressions loaded
+  Compute --> UpdateCtx : computation complete
+  Compute --> [*] : computation error\n[ERROR]
+  UpdateCtx --> [*] : context updated
+}
+
+state "Integration State Processing" as IntegrationState {
+  state "Preparing API Call" as PrepareAPI
+  state "Calling External Service" as CallAPI
+  state "Processing Response" as ProcessResp
+  state "Handling Error" as HandleError
+  
+  [*] --> PrepareAPI
+  PrepareAPI --> CallAPI : params ready
+  CallAPI --> ProcessResp : success
+  CallAPI --> HandleError : API error
+  ProcessResp --> [*] : response processed
+  HandleError --> [*] : error handled
+}
+
+state "Service State Processing" as ServiceState {
+  state "Loading Service Config" as LoadService
+  state "Executing Service Logic" as ExecService
+  state "Storing Results" as StoreResults
+  
+  [*] --> LoadService
+  LoadService --> ExecService : config loaded
+  ExecService --> StoreResults : execution complete
+  StoreResults --> [*] : results stored
+}
+
+ScreenState --> TransitionEvaluation : event processed
+TechnicalState --> TransitionEvaluation : expressions evaluated
+IntegrationState --> TransitionEvaluation : API call complete
+ServiceState --> TransitionEvaluation : service complete
+
+state "Transition Evaluation" as TransitionEvaluation {
+  state "Finding Candidates" as FindCandidates
+  state "Evaluating Conditions" as EvalConditions
+  state "Selecting Transition" as SelectTransition
+  
+  [*] --> FindCandidates
+  FindCandidates --> EvalConditions : candidates found
+  FindCandidates --> [*] : no candidates\n[ERROR]
+  EvalConditions --> SelectTransition : condition matches
+  EvalConditions --> [*] : no match\n[ERROR]
+  SelectTransition --> [*] : transition selected
+}
+
+TransitionEvaluation --> StateTransition : transition found
+
+state "State Transition" as StateTransition {
+  state "Saving Checkpoint" as Checkpoint
+  state "Loading Next State" as LoadNext
+  state "Binding Expressions" as BindExpr
+  state "Updating State Reference" as UpdateRef
+  
+  [*] --> Checkpoint
+  Checkpoint --> LoadNext : checkpoint saved
+  LoadNext --> BindExpr : state loaded
+  BindExpr --> UpdateRef : expressions bound
+  UpdateRef --> [*] : transition complete
+}
+
+StateTransition --> FinalCheck : transition complete
+
+state "Final Check" as FinalCheck <<choice>>
+FinalCheck --> StateReady : not final state
+FinalCheck --> WorkflowComplete : final state
+
+state "Workflow Complete" as WorkflowComplete {
+  state "Cleaning Up Session" as Cleanup
+  state "Generating Report" as Report
+  
+  [*] --> Cleanup
+  Cleanup --> Report : session cleaned
+  Report --> [*] : report generated
+}
+
+WorkflowComplete --> [*]
+
+note right of ScreenState
+  Screen states ожидают события от клиента.
+  Переход происходит только после
+  получения корректного события.
+end note
+
+note right of TechnicalState
+  Technical states выполняются
+  автоматически без ожидания
+  событий от клиента.
+end note
+
+note right of IntegrationState
+  Integration states вызывают
+  внешние API и обрабатывают ответы.
+  Могут обрабатывать ошибки и повторы.
+end note
+
+note bottom of TransitionEvaluation
+  Для screen состояний переходы ищутся
+  по event_name, для остальных - по
+  результатам вычисления выражений.
+end note
+
+@enduml

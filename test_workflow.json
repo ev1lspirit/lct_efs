@@ -1,0 +1,309 @@
+[
+  {
+    "state_type": "screen",
+    "name": "UserInputScreen",
+    "transitions": [
+      {
+        "case": "search",
+        "state_id": "ValidateInput"
+      }
+    ],
+    "expressions": [
+      {
+        "event_name": "search"
+      }
+    ],
+    "initial_state": true,
+    "final_state": false
+  },
+  {
+    "state_type": "technical",
+    "name": "ValidateInput",
+    "transitions": [
+      {
+        "variable": "input_valid",
+        "case": "True",
+        "state_id": "FetchUserProfile"
+      },
+      {
+        "variable": "input_valid",
+        "case": "False",
+        "state_id": "ValidationErrorScreen"
+      }
+    ],
+    "expressions": [
+      {
+        "variable": "input_valid",
+        "dependent_variables": [
+          "user_id",
+          "api_key"
+        ],
+        "expression": "len(user_id) > 0 and len(api_key) > 0"
+      }
+    ],
+    "initial_state": false,
+    "final_state": false
+  },
+  {
+    "state_type": "integration",
+    "name": "FetchUserProfile",
+    "transitions": [
+      {
+        "variable": "user_profile",
+        "case": null,
+        "state_id": "FetchUserOrders"
+      },
+      {
+        "variable": "profile_error",
+        "case": "True",
+        "state_id": "ProfileErrorScreen"
+      }
+    ],
+    "expressions": [
+      {
+        "variable": "user_profile",
+        "url": "https://jsonplaceholder.typicode.com/users/{{user_id}}",
+        "params": {},
+        "method": "get",
+        "dependent_variables": [
+          "user_id"
+        ],
+        "error_variable": "profile_error"
+      }
+    ],
+    "initial_state": false,
+    "final_state": false
+  },
+  {
+    "state_type": "integration",
+    "name": "FetchUserOrders",
+    "transitions": [
+      {
+        "variable": "orders",
+        "case": null,
+        "state_id": "ProcessOrdersData"
+      },
+      {
+        "variable": "orders_error",
+        "case": "True",
+        "state_id": "OrdersErrorScreen"
+      }
+    ],
+    "expressions": [
+      {
+        "variable": "orders",
+        "url": "https://jsonplaceholder.typicode.com/posts",
+        "params": {
+          "userId": "{{user_id}}",
+          "_limit": "5"
+        },
+        "method": "get",
+        "dependent_variables": [
+          "user_id"
+        ],
+        "error_variable": "orders_error"
+      }
+    ],
+    "initial_state": false,
+    "final_state": false
+  },
+  {
+    "state_type": "technical",
+    "name": "ProcessOrdersData",
+    "transitions": [
+      {
+        "variable": "has_orders",
+        "case": "True",
+        "state_id": "CreateOrderSummary"
+      },
+      {
+        "variable": "has_orders",
+        "case": "False",
+        "state_id": "NoOrdersScreen"
+      }
+    ],
+    "expressions": [
+      {
+        "variable": "has_orders",
+        "dependent_variables": [
+          "orders"
+        ],
+        "expression": "len(orders) > 0"
+      }
+    ],
+    "initial_state": false,
+    "final_state": false
+  },
+  {
+    "state_type": "integration",
+    "name": "CreateOrderSummary",
+    "transitions": [
+      {
+        "variable": "summary",
+        "case": null,
+        "state_id": "DisplayResults"
+      },
+      {
+        "variable": "summary_error",
+        "case": "True",
+        "state_id": "SummaryErrorScreen"
+      }
+    ],
+    "expressions": [
+      {
+        "variable": "summary",
+        "url": "https://jsonplaceholder.typicode.com/posts",
+        "params": {
+          "title": "Order Summary for User {{user_id}}",
+          "body": "Summary of orders",
+          "userId": "{{user_id}}"
+        },
+        "method": "post",
+        "dependent_variables": [
+          "user_id"
+        ],
+        "error_variable": "summary_error"
+      }
+    ],
+    "initial_state": false,
+    "final_state": false
+  },
+  {
+    "state_type": "screen",
+    "name": "DisplayResults",
+    "transitions": [
+      {
+        "case": "new_search",
+        "state_id": "UserInputScreen"
+      },
+      {
+        "case": "exit",
+        "state_id": "ExitFlow"
+      }
+    ],
+    "expressions": [
+      {
+        "event_name": "new_search"
+      },
+      {
+        "event_name": "exit"
+      }
+    ],
+    "initial_state": false,
+    "final_state": false
+  },
+  {
+    "state_type": "screen",
+    "name": "ValidationErrorScreen",
+    "transitions": [
+      {
+        "case": "retry",
+        "state_id": "UserInputScreen"
+      }
+    ],
+    "expressions": [
+      {
+        "event_name": "retry"
+      }
+    ],
+    "initial_state": false,
+    "final_state": false
+  },
+  {
+    "state_type": "screen",
+    "name": "ProfileErrorScreen",
+    "transitions": [
+      {
+        "case": "retry",
+        "state_id": "FetchUserProfile"
+      },
+      {
+        "case": "back",
+        "state_id": "UserInputScreen"
+      }
+    ],
+    "expressions": [
+      {
+        "event_name": "retry"
+      },
+      {
+        "event_name": "back"
+      }
+    ],
+    "initial_state": false,
+    "final_state": false
+  },
+  {
+    "state_type": "screen",
+    "name": "OrdersErrorScreen",
+    "transitions": [
+      {
+        "case": "retry",
+        "state_id": "FetchUserOrders"
+      },
+      {
+        "case": "back",
+        "state_id": "UserInputScreen"
+      }
+    ],
+    "expressions": [
+      {
+        "event_name": "retry"
+      },
+      {
+        "event_name": "back"
+      }
+    ],
+    "initial_state": false,
+    "final_state": false
+  },
+  {
+    "state_type": "screen",
+    "name": "SummaryErrorScreen",
+    "transitions": [
+      {
+        "case": "continue",
+        "state_id": "DisplayResults"
+      },
+      {
+        "case": "back",
+        "state_id": "UserInputScreen"
+      }
+    ],
+    "expressions": [
+      {
+        "event_name": "continue"
+      },
+      {
+        "event_name": "back"
+      }
+    ],
+    "initial_state": false,
+    "final_state": false
+  },
+  {
+    "state_type": "screen",
+    "name": "NoOrdersScreen",
+    "transitions": [
+      {
+        "case": "back",
+        "state_id": "UserInputScreen"
+      }
+    ],
+    "expressions": [
+      {
+        "event_name": "back"
+      }
+    ],
+    "initial_state": false,
+    "final_state": false
+  },
+  {
+    "state_type": "screen",
+    "name": "ExitFlow",
+    "transitions": [],
+    "expressions": [],
+    "initial_state": false,
+    "final_state": true
+  }
+]

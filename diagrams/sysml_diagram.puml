@@ -1,0 +1,294 @@
+@startuml SysML Block Definition Diagram - Workflow Management System
+!theme blueprint
+
+title SysML Block Definition Diagram - Workflow Management System
+
+' Главный блок системы
+package "Workflow Management System" <<System>> {
+  
+  ' API Layer
+  package "API Layer" <<subsystem>> {
+    class "FastAPI Application" as API {
+      + app: FastAPI
+      + router: APIRouter
+      --
+      + /workflow/save
+      + /client/workflow
+      --
+      {method} POST save_workflow()
+      {method} POST check_session()
+    }
+  }
+  
+  ' Core Workflow Engine
+  package "Workflow Engine" <<subsystem>> {
+    
+    class "Automaton" <<block>> {
+      - session_id: str
+      - workflow_id: str
+      - current_state: WorkflowState
+      - session_context: SessionContext
+      --
+      {method} + run(event_name: str): dict
+      {method} - _evaluate_executables()
+      {method} - _get_transition_candidates()
+      {method} - _transit_state()
+      {method} - _call_state_checkpoint()
+    }
+    
+    class "WorkflowState" <<block>> {
+      - uid: UUID
+      - name: str
+      - type_: StateTypeEnum
+      - transitions: list[Transition]
+      - expressions: list
+      - executables: list
+      --
+      {method} + _create_exec_handlers()
+      {method} + _bind_transitions()
+    }
+    
+    class "ScreenState" <<block>> {
+      {field} type_ = screen
+      --
+      Представляет экран UI
+      с формами и кнопками
+    }
+    
+    class "TechnicalState" <<block>> {
+      {field} type_ = technical
+      --
+      Выполняет логические
+      вычисления и проверки
+    }
+    
+    class "IntegrationState" <<block>> {
+      {field} type_ = integration
+      --
+      Вызывает внешние API
+      и сервисы
+    }
+    
+    class "ServiceState" <<block>> {
+      {field} type_ = service
+      --
+      Выполняет внутренние
+      сервисные операции
+    }
+  }
+  
+  ' State Components
+  package "State Components" <<subsystem>> {
+    
+    class "Transition" <<block>> {
+      - variable: str
+      - case: str
+      - keys: set[str]
+      - state_id: str
+      - variables: set[str]
+      --
+      {method} + matches(context): bool
+    }
+    
+    class "Expression" <<block>> {
+      <<abstract>>
+      --
+      {method} + bindable(): bool
+      {method} + result(): Any
+    }
+    
+    class "ScreenStateExpression" <<block>> {
+      - event_name: str
+      - type_: StateTypeEnum = screen
+      --
+      Выражение для обработки
+      событий от UI
+    }
+    
+    class "TechnicalStateExpression" <<block>> {
+      - variable: str
+      - expression: str
+      - dependent_variables: list[str]
+      --
+      Выражение для логических
+      вычислений
+    }
+    
+    class "IntegrationStateExpression" <<block>> {
+      - variable: str
+      - adapter_name: str
+      - adapter_method: str
+      - method_params: dict
+      --
+      Выражение для вызова
+      внешних API
+    }
+  }
+  
+  ' Handlers
+  package "Expression Handlers" <<subsystem>> {
+    
+    class "BaseHandler" <<block>> {
+      <<abstract>>
+      - metadata: Expression
+      - context: SessionContext
+      --
+      {method} + result(): Any
+    }
+    
+    class "ScreenHandler" <<block>> {
+      {method} + result(event_name: str): bool
+      --
+      Проверяет совпадение
+      события с metadata
+    }
+    
+    class "TechnicalHandler" <<block>> {
+      {method} + result(): Any
+      --
+      Вычисляет выражения
+      через simpleeval
+    }
+    
+    class "IntegrationHandler" <<block>> {
+      {method} + result(): dict
+      --
+      Вызывает адаптер API
+      и возвращает результат
+    }
+  }
+  
+  ' Storage Layer
+  package "Storage Layer" <<subsystem>> {
+    
+    class "MongoDBClient" <<block>> {
+      - client: MongoClient
+      - database: Database
+      - collection: Collection
+      --
+      {method} + save(document): ObjectId
+      {method} + find_one(query): dict
+      {method} + update_one(query, update)
+    }
+    
+    class "RedisCache" <<block>> {
+      - redis_client: Redis
+      - session_ttl: int
+      --
+      {method} + get_session(session_id): dict
+      {method} + save_session(session_id, data)
+      {method} + delete_session(session_id)
+    }
+    
+    class "SessionContext" <<block>> {
+      - _cache: RedisCache
+      - _session_id: str
+      - session: dict
+      --
+      {method} + __enter__()
+      {method} + __exit__()
+      {method} + __getitem__(key)
+      {method} + __setitem__(key, value)
+    }
+  }
+  
+  ' External Adapters
+  package "External Adapters" <<subsystem>> {
+    
+    class "CommonAdapter" <<block>> {
+      - base_url: str
+      - timeout: int
+      --
+      {method} + get(endpoint, params): dict
+      {method} + post(endpoint, data): dict
+      {method} + _make_request()
+    }
+  }
+  
+  ' Parser and Builders
+  package "Workflow Parser" <<subsystem>> {
+    
+    class "GlobalStateParser" <<block>> {
+      - initial_state_name: str
+      - workflow_id: str
+      - data: dict
+      --
+      {method} + parse(): WorkflowState
+      {method} - _load_workflow()
+      {method} - _validate_workflow()
+    }
+    
+    class "BaseHandlersCreator" <<block>> {
+      <<abstract>>
+      - workflow_state: WorkflowState
+      - handlers: list
+      - context: SessionContext
+      --
+      {method} + __call__(): list
+      {method} + create_handler()
+    }
+  }
+}
+
+' Отношения композиции и агрегации
+Automaton *-- WorkflowState : contains
+Automaton *-- SessionContext : uses
+
+WorkflowState <|-- ScreenState
+WorkflowState <|-- TechnicalState
+WorkflowState <|-- IntegrationState
+WorkflowState <|-- ServiceState
+
+WorkflowState o-- Transition : has many
+WorkflowState o-- Expression : has many
+
+Expression <|-- ScreenStateExpression
+Expression <|-- TechnicalStateExpression
+Expression <|-- IntegrationStateExpression
+
+BaseHandler <|-- ScreenHandler
+BaseHandler <|-- TechnicalHandler
+BaseHandler <|-- IntegrationHandler
+
+BaseHandler o-- Expression : wraps
+
+SessionContext --> RedisCache : uses
+Automaton --> MongoDBClient : uses
+
+GlobalStateParser ..> WorkflowState : creates
+BaseHandlersCreator ..> BaseHandler : creates
+
+IntegrationHandler --> CommonAdapter : uses
+
+API --> Automaton : instantiates
+API --> SessionContext : manages
+
+' Заметки с ограничениями
+note right of Automaton
+  {constraint}
+  Один автомат на сессию
+  Сессия уникальна для workflow
+end note
+
+note bottom of WorkflowState
+  {constraint}
+  Состояние должно иметь
+  хотя бы один переход
+  (кроме final state)
+end note
+
+note left of SessionContext
+  {constraint}
+  Контекст автоматически
+  сохраняется в Redis
+  при выходе из блока with
+end note
+
+note right of Expression
+  {constraint}
+  Expression должен быть
+  привязан к Transition
+  через event_name или variable
+end note
+
+@enduml

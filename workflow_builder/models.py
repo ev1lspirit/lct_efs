@@ -1,4 +1,4 @@
-from enum import StrEnum
+from enum import Enum
 from typing import Type, TypeVar
 
 from workflow_builder.builders.dependency import WorkflowServiceHandlersCreator
@@ -12,7 +12,7 @@ from .builders.screen import WorkflowScreenHandlersCreator
 StateModel = TypeVar("StateModel")
 
 
-class StateTypeEnum(StrEnum):
+class StateTypeEnum(str, Enum):
     """Типы состояний в рамках FSM"""
 
     screen = "screen"
