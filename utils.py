@@ -1,4 +1,3 @@
-import base64
 from functools import wraps
 import hashlib
 import json
@@ -159,3 +158,22 @@ class GeneralPurposeSingletonMeta(type):
         if cls not in cls.__instances:
             cls.__instances[cls] = super().__call__(*args, **kwargs)
         return cls.__instances[cls]
+
+
+class AmbiguityFreeList(list):
+
+    def __init__(self):
+        super().__init__()
+        self.unique_items_set = set()
+
+    def append(self, object: Any) -> None:
+        if object in self.unique_items_set:
+            raise ValueError(f"Duplicate item found. One expression seems to be overwriting the result of other expression with the same state. Original: {self}  Extension: {object}")
+        self.unique_items_set.add(object)
+        return super().append(object)
+
+    def extend(self, iterable) -> None:
+        if any(item in self.unique_items_set for item in iterable):
+            raise ValueError(f"Duplicate item found in iterable. One expression seems to be overwriting the result of other expression with the same state. Original: {self}  Extension: {iterable}")
+        self.unique_items_set.update(iterable)
+        return super().extend(iterable)

@@ -1,6 +1,15 @@
+<<<<<<< HEAD
 from typing import Any, Literal, Optional, Union
 from pydantic import BaseModel, model_validator
 from workflow_builder.expressions import ServiceStateExpression, Expression
+=======
+from email.policy import default
+from re import S
+from typing import Any, Literal, Optional, Union
+from pydantic import BaseModel, Field, field_validator, model_validator
+from workflow_builder.expressions import ServiceStateExpression, Expression
+from workflow_builder.models import StateTypeEnum
+>>>>>>> 8f528df (validators init)
 from workflow_builder.states import (
     IntegrationState,
     ScreenState,
@@ -53,18 +62,38 @@ class EventModel(BaseModel):
 class StateModel(BaseModel):
     state_type: Literal["technical", "integration", "screen", "service"]
     name: str
-    screen: dict = {}
-    transitions: list[TransitionModel] = []
+    screen: dict = Field(default_factory=dict)
+    transitions: list[TransitionModel] = Field(default_factory=list)
     expressions: list[
         Union[
             TechnicalExpressionModel,
             IntegrationExpressionModel,
             EventModel
         ]
-    ] = []
+    ] = Field(default_factory=list)
     initial_state: bool = False
-    events: list[EventModel] = []
+    events: list[EventModel] = Field(default_factory=list)
     final_state: bool = False
+
+    @field_validator("expressions", mode="after")
+    def validate_events(cls, value: list[EventModel], info):
+        type_ = StateTypeEnum(info.data.get("state_type"))
+        if type_ == StateTypeEnum.service:
+            return value
+
+        types_ = {
+            StateTypeEnum.screen: EventModel,
+            StateTypeEnum.technical: TechnicalExpressionModel,
+            StateTypeEnum.integration: IntegrationExpressionModel
+        }
+
+        if any(
+            map(lambda x: type(x) is not types_[type_],
+                value)
+        ):
+            raise ValueError(
+                f"State type {type_} can't have expressions of type {types_[type_]}")
+        return value
 
     @classmethod
     def zero_state(cls, next_state_name: str):

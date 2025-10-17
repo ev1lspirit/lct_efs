@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from storage.mongo.client import MongoDBClient, get_mongo_client_as_dependency
 from storage.redis.service import RedisCache, get_redis_cache
+from validators.automaton import AutomatonValidator
 from workflow_builder.automaton.automaton import Automaton
 from workflow_builder.state_parser.contract import StateSet
 from config import settings
@@ -76,6 +77,9 @@ async def save_workflow(
         f"Starting workflow save process. States count: {len(body.states.states)}"
     )
     try:
+        breakpoint()
+        validator = AutomatonValidator(states=body.states.states)
+        validator.run()
         states_client = mongo_client(collection=settings.STATES_MONGO_COLLECTION)
         workflow_context_client = mongo_client(
             collection=settings.WORKFLOW_MONGO_COLLECTION
@@ -437,4 +441,3 @@ def _create_new_session(
     )
 
     return session_context
-
