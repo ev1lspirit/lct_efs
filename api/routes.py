@@ -9,8 +9,37 @@ from workflow_builder.automaton.automaton import Automaton
 from workflow_builder.state_parser.contract import StateSet
 from config import settings
 from workflow_builder.models import StateTypeEnum
+import re
 
 router = APIRouter()
+
+
+def _is_valid_session_id(session_id: str) -> bool:
+    """
+    Validate session_id format to prevent injection attacks
+    
+    Accepts:
+    - UUID format (with or without hyphens)
+    - Alphanumeric strings with hyphens/underscores (max 128 chars)
+    
+    Args:
+        session_id: Session identifier to validate
+        
+    Returns:
+        True if valid, False otherwise
+    """
+    if not session_id or not isinstance(session_id, str):
+        return False
+    
+    # Проверка длины (защита от DOS)
+    if len(session_id) > 128:
+        return False
+    
+    # Разрешаем UUID или буквенно-цифровые строки с дефисами/подчеркиваниями
+    # Запрещаем символы, которые могут быть использованы для инъекций
+    pattern = r'^[a-zA-Z0-9_-]+$'
+    
+    return bool(re.match(pattern, session_id))
 
 
 class WorkflowRequest(BaseModel):
@@ -318,27 +347,59 @@ async def _get_or_create_session(
         Session context dictionary
 
     Raises:
-        HTTPException: If workflow ID is missing for new session
+        HTTPException: If workflow ID is missing for new session or validation fails
     """
-    session_key = redis_cache.get_session_key(body.client_session_id)
-    if redis_cache.r.exists(session_key):
-        return _handle_existing_session(body, redis_cache)
+    # Валидация session_id формата (должен быть UUID или безопасная строка)
+    if not _is_valid_session_id(body.client_session_id):
+        logger.error(f"Invalid session_id format: {body.client_session_id}")
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid session_id format. Expected UUID or alphanumeric string"
+        )
+    
+    # Атомарно получаем сессию (get_session теперь возвращает None если не существует)
+    session_context = redis_cache.get_session(body.client_session_id)
+    
+    if session_context is not None:
+        return _handle_existing_session(body, redis_cache, session_context)
     return _create_new_session(body, redis_cache)
 
 
 def _handle_existing_session(
-    body: WorkflowRequest, redis_cache: RedisCache
+    body: WorkflowRequest, redis_cache: RedisCache, session_context: dict
 ) -> dict[str, Any]:
     """Handle existing session retrieval and context updates"""
     logger.info(f"Session found: {body.client_session_id}")
 
-    session_context = redis_cache.get_session(body.client_session_id)
-    body.client_workflow_id = session_context.get("__workflow_id")
+    stored_workflow_id = session_context.get("__workflow_id")
+    
+    # Проверка на отсутствие workflow_id в сессии (критическая ошибка)
+    if not stored_workflow_id:
+        logger.error(
+            f"Session {body.client_session_id} exists but has no workflow_id. "
+            "This indicates corrupted session data."
+        )
+        raise HTTPException(
+            status_code=500,
+            detail="Session data corrupted: missing workflow_id"
+        )
+    
+    # Проверка на попытку сменить workflow_id
+    if body.client_workflow_id and body.client_workflow_id != stored_workflow_id:
+        logger.warning(
+            f"Attempt to change workflow_id for session {body.client_session_id}: "
+            f"{stored_workflow_id} -> {body.client_workflow_id}. Ignoring new workflow_id."
+        )
+        # Можно либо игнорировать, либо вернуть ошибку. Выберем игнорирование с предупреждением.
+    
+    # Используем сохраненный workflow_id
+    body.client_workflow_id = stored_workflow_id
 
     logger.info(
         f"Retrieved existing session. Current workflow: {body.client_workflow_id}, "
         f"Event: {body.event_name}"
     )
+    
     # Update session context if new context provided
     if body.context:
         logger.debug(f"Updating session context with: {body.context}")
@@ -357,15 +418,18 @@ def _create_new_session(
         raise HTTPException(
             status_code=400, detail="Workflow ID is required for new session"
         )
+    
     session_context = {
         "__workflow_id": body.client_workflow_id,
         "__created_at": str(datetime.now()),
     }
+    
     # Add initial context if provided
     if body.context:
         session_context.update(body.context)
 
-    redis_cache.update_session(body.client_session_id, session_context)
+    # Создаем сессию с TTL (по умолчанию 3600 секунд = 1 час)
+    redis_cache.update_session(body.client_session_id, session_context, ttl=3600)
 
     logger.info(
         f"Created new session: {body.client_session_id} "

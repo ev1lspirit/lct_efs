@@ -208,18 +208,29 @@ class Automaton:
         return on_return
 
     def run(self, event_name: Optional[str]):
+        logger.info("=" * 80)
         logger.info(
-            f"Beginning pipeline with current state: {self.current_state.type_}"
+            f"🚀 STARTING WORKFLOW EXECUTION | Session: {self._session_id[:8]}... | Workflow: {self._workflow_id[:8]}..."
         )
+        logger.info(
+            f"📍 Initial state: '{self.current_state.name}' ({self.current_state.type_.value})"
+        )
+        if event_name:
+            logger.info(f"📨 Event: '{event_name}'")
+        logger.info("=" * 80)
+        
         start_time = time.time()
         on_return = self._get_on_return_policy()
 
         while True:
             if self.current_state._final:
                 total_execution_time = time.time() - start_time
+                logger.info("=" * 80)
                 logger.info(
-                    f"🏁 Pipeline finished. Total execution time: {total_execution_time*1000:.2f}ms ({total_execution_time:.4f}s)"
+                    f"🏁 WORKFLOW COMPLETED | Final state: '{self.current_state.name}' | "
+                    f"Time: {total_execution_time*1000:.2f}ms ({total_execution_time:.4f}s)"
                 )
+                logger.info("=" * 80)
                 break
 
             # Засекаем время начала выполнения состояния
@@ -284,7 +295,13 @@ class Automaton:
                 raise ValueError("No matching transition found")
 
             next_state_name = candidate.state_id
-            logger.info(f"Setting next state: {next_state_name}")
+            
+            # Логируем переход между состояниями
+            logger.info(
+                f"🔄 STATE TRANSITION: '{self.current_state.name}' ({self.current_state.type_.value}) "
+                f"→ '{next_state_name}'"
+            )
+            
             next_state_object = self.state_mapping.get(next_state_name)
             if next_state_object is None:
                 logger.error(
@@ -294,6 +311,10 @@ class Automaton:
                     f"Next state {next_state_name} not found. Check if it was created."
                 )
             self.current_state = next_state_object
+            
+            logger.info(
+                f"✅ Now in state: '{self.current_state.name}' ({self.current_state.type_.value})"
+            )
 
     def __repr__(self):
         return f"<{self.__class__.__name__} states={self.states}>"

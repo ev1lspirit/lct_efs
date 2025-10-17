@@ -23,7 +23,25 @@ class SessionContext:
 
     def _get_session_context(self):
         try:
-            return self._redis_cache.get_session(self._session_id)
+            session = self._redis_cache.get_session(self._session_id)
+            
+            # Проверяем, что сессия действительно существует
+            if session is None:
+                logger.error(
+                    f"Session {self._session_id} not found in Redis. "
+                    "It may have expired or never been created."
+                )
+                raise ValueError(f"Session {self._session_id} not found")
+            
+            # Проверяем наличие обязательного поля __workflow_id
+            if "__workflow_id" not in session:
+                logger.error(
+                    f"Session {self._session_id} is missing __workflow_id. "
+                    "Session data may be corrupted."
+                )
+                raise ValueError(f"Session {self._session_id} has corrupted data")
+            
+            return session
         except Exception as e:
             logger.error(f"Failed to get session. Error: {e}")
             raise e

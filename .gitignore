@@ -44,3 +44,37 @@ Thumbs.db
 # Local configs
 *.env
 .env.*
+
+# ==========================================
+# Project-specific temporary files
+# ==========================================
+
+# Временные JSON файлы workflow
+workflow_deployed.json
+workflow_correct_format.json
+test_workflow.json
+
+# Тестовые/демо HTML файлы
+workflow_client_demo.html
+
+# Временные скрипты развертывания
+deploy_correct_format.py
+deploy_workflow_with_screens.py
+save_cart_workflow.py
+
+# Скрипты проверки и тестирования
+check_workflow_structure.py
+check_workflows.py
+find_workflows.py
+run_integration_test.py
+test_client_endpoint.py
+test_fixed_workflow.py
+test_new_format.py
+
+# Отчеты и документация (устаревшие/промежуточные)
+FINAL_REPORT.md
+SOLUTION_SUMMARY.txt
+VISUAL_SUMMARY.txt
+
+# Копия docker-compose в корне (основной в deployments/)
+docker-compose.yml

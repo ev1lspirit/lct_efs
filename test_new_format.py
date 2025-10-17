@@ -9,6 +9,9 @@
 
 import json
 import logging
+from unittest.mock import patch
+
+import pytest
 from storage.mongo.client import MongoDBClient
 from config import settings
 
@@ -64,6 +67,40 @@ def test_format_validation():
                 logger.debug(f"   {state_name}: {method} - OK")
     
     return workflow_data
+
+
+@pytest.fixture(scope="module")
+def mongo_mock():
+    """Подменяет MongoDB клиент на mongomock для изоляции тестов."""
+    try:
+        from mongomock import MongoClient as MockMongoClient
+    except ImportError as exc:  # pragma: no cover - защитная проверка
+        raise pytest.SkipTest("mongomock недоступен, пропускаем тесты нового формата") from exc
+
+    with patch("storage.mongo.client.MongoClient", MockMongoClient):
+        yield
+
+
+@pytest.fixture(scope="module")
+def workflow_data():
+    """Готовый JSON workflow из примера."""
+    return load_cart_workflow()
+
+
+@pytest.fixture(scope="module")
+def workflow_id(mongo_mock, workflow_data):
+    """Сохраняет workflow в тестовой базе и возвращает его ID."""
+    client = MongoDBClient(
+        database=settings.MONGO_DB,
+        collection=settings.STATES_MONGO_COLLECTION,
+    )
+    wf_id = client.insert_workflow_with_format_validation(workflow_data)
+    if not wf_id:
+        pytest.skip("Не удалось сохранить workflow в тестовую MongoDB")
+    return wf_id
+
+
+pytestmark = pytest.mark.usefixtures("mongo_mock")
 
 
 def test_save_workflow(workflow_data):

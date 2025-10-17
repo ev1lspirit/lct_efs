@@ -219,8 +219,10 @@ class IntegrationHandler(BaseHandler):
     def result(self):  # type: ignore
         # Интерполируем URL - заменяем {{variable}} в самом URL
         interpolated_url = self.metadata.url
+        url_variables_found = []
         for match in re.finditer(r'\{\{(\w+)\}\}', self.metadata.url):
             var_name = match.group(1)
+            url_variables_found.append(var_name)
             if var_name not in self.context.session:
                 raise ValueError(
                     f"Variable '{var_name}' required in URL but not found in context. "
@@ -229,32 +231,50 @@ class IntegrationHandler(BaseHandler):
             context_value = self.context.session[var_name]
             interpolated_url = interpolated_url.replace(f"{{{{{var_name}}}}}", str(context_value))
         
+        if url_variables_found:
+            logger.debug(f"URL variables interpolated: {url_variables_found}")
+        
         base_url, endpoint = self._split_url(interpolated_url)
+        logger.debug(f"Base URL: {base_url}, Endpoint: {endpoint}")
         
         # Интерполируем params или body в зависимости от метода
         method = self.metadata.method.lower()
+        request_kwargs = {}
+        
         if method in ['post', 'put', 'patch']:
-            # POST/PUT/PATCH используют body
+            # POST/PUT/PATCH используют body (передается как json в requests)
             params_to_use = self.metadata.body or {}
             interpolated_params = self._interpolate_params(params_to_use)
             logger.info(f"Integration request: {self.metadata.method.upper()} {interpolated_url}")
             logger.debug(f"Original body: {self.metadata.body}")
             logger.debug(f"Interpolated body: {interpolated_params}")
+            # Для POST/PUT/PATCH передаем данные как json, а не params
+            request_kwargs['json'] = interpolated_params
         else:
-            # GET/DELETE используют params
+            # GET/DELETE используют params (query string)
             params_to_use = self.metadata.params or {}
             interpolated_params = self._interpolate_params(params_to_use)
             logger.info(f"Integration request: {self.metadata.method.upper()} {interpolated_url}")
             logger.debug(f"Original params: {self.metadata.params}")
             logger.debug(f"Interpolated params: {interpolated_params}")
+            request_kwargs['params'] = interpolated_params
+        
+        logger.debug(f"Request kwargs prepared: {list(request_kwargs.keys())}")
         
         adapter = self.adapter(base_url=base_url)
         method_attr = self._get_method(adapter)
-        response = method_attr(endpoint=endpoint, params=interpolated_params)
+        
+        logger.info(f"Executing adapter method: {self.metadata.method.upper()}")
+        response = method_attr(endpoint=endpoint, **request_kwargs)
         
         # Проверяем, является ли ответ ошибкой
         if hasattr(response, 'error') and response.error:
             logger.error(f"API request failed: {response.message}")
+            if hasattr(response, 'status_code') and response.status_code:
+                logger.error(f"Status code: {response.status_code}")
+            if hasattr(response, 'content') and response.content:
+                logger.debug(f"Error response content: {response.content}")
+            
             # Если указана переменная для ошибки, сохраняем в контекст
             if self.metadata.error_variable:
                 with self.context as ctx:
@@ -268,5 +288,10 @@ class IntegrationHandler(BaseHandler):
             # Возвращаем ошибку вместо исключения для возможности обработки в workflow
             return response
         
-        logger.info(f"Integration response received: {type(response).__name__}")
+        logger.info(f"Integration response received successfully: {type(response).__name__}")
+        if isinstance(response, dict):
+            logger.debug(f"Response keys: {list(response.keys())}")
+        elif isinstance(response, list):
+            logger.debug(f"Response is a list with {len(response)} items")
+        
         return response

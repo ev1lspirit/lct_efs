@@ -1,5 +1,7 @@
 # 🚀 LCT EFS - Workflow Management System
 
+> **🔐 Обновление безопасности (16.10.2025)**: Исправлены критические проблемы обработки сессий. См. [SESSION_FIXES_SUMMARY.md](docs/SESSION_FIXES_SUMMARY.md)
+
 ## 📋 Описание проекта
 
 LCT EFS (Workflow Management System) - это современная платформа для управления бизнес-процессами и пользовательскими workflow. Система поддерживает декларативное описание процессов в формате JSON, автоматическое управление состояниями, интеграцию с внешними API и динамическое создание пользовательских интерфейсов.
@@ -13,6 +15,7 @@ LCT EFS (Workflow Management System) - это современная платф�
 - 💾 **Управление контекстом** - хранение состояния сессии в Redis
 - 📱 **Multi-platform** - поддержка веб и мобильных клиентов
 - 🔧 **Extensible** - легко расширяемая архитектура
+- 🔐 **Безопасность** - валидация session_id, защита от инъекций, автоматическое продление TTL
 
 ## 🏗️ Архитектура системы
 
@@ -198,7 +201,51 @@ curl http://localhost:8080/healthcheck
 ## 📂 Структура проекта
 
 ```
-lct_efs/
+# lct_efs - Workflow Engine
+
+Движок для выполнения workflow (конечных автоматов) с поддержкой различных типов состояний: screen, technical, integration и service.
+
+## 🚀 Быстрый старт
+
+### Установка зависимостей
+```bash
+./.venv/bin/python -m pip install -r deployments/requirements.txt
+```
+
+### Запуск инфраструктуры
+```bash
+docker-compose -f deployments/docker-compose.yaml up -d
+```
+
+### Запуск API
+```bash
+./.venv/bin/python -m uvicorn api.app:app --reload --port 8080
+```
+
+### Запуск тестов
+```bash
+./.venv/bin/python -m pytest
+```
+
+## 📚 Ключевые компоненты
+
+- **Workflow Builder** (`workflow_builder/`) - парсинг и выполнение workflow
+- **API** (`api/`) - FastAPI endpoints для управления workflow
+- **Storage** (`storage/`) - адаптеры для MongoDB и Redis
+- **Tests** (`tests/`) - end-to-end и unit тесты
+
+## 🔧 Конфигурация
+
+Создайте `.env` файл с настройками:
+```env
+MONGO_DB=test
+MONGO_URL=mongodb://localhost:27017
+REDIS_URL=redis://localhost:6379/0
+```
+
+## 📖 Документация
+
+См. `docs/` для детальной документации и `.github/copilot-instructions.md` для AI-ассистентов./
 ├── api/                    # FastAPI приложение
 │   ├── app.py             # Основное приложение
 │   ├── routes.py          # API маршруты

@@ -52,10 +52,17 @@ class Settings:
 
     @property
     def redis_url(self):
+        # Если пароль не задан, подключаемся без аутентификации
+        if not self.REDIS_PASSWORD:
+            return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
         return f"redis://:{self.REDIS_PASSWORD}@{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
 
     @property
     def mongo_url(self) -> str:
+        # Если учетные данные не заданы, подключаемся без аутентификации
+        if not self.MONGO_USER or not self.MONGO_PASSWORD:
+            return f"mongodb://{self.MONGO_HOST}:{self.MONGO_PORT}/"
+        
         return (
             f"mongodb://{self.MONGO_USER}:{self.MONGO_PASSWORD}"
             f"@{self.MONGO_HOST}:{self.MONGO_PORT}/"

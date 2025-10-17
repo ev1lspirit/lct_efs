@@ -42,32 +42,57 @@ class RedisCache(metaclass=GeneralPurposeSingletonMeta):
         state = self.r.hgetall(redis_key)
         return prepare_context_response(state)
 
-    def create_session(self, data: dict) -> str:
+    def create_session(self, data: dict, ttl: int = 3600) -> str:
         """
         Создает сессию в Redis и возвращает ее идентификатор.
 
         :param data: словарь с данными сессии
+        :param ttl: время жизни сессии в секундах (по умолчанию 3600)
         :return: идентификатор сессии
         """
         session_id = str(uuid.uuid4())
         key = self.get_session_key(session_id)
         self.r.hset(key, mapping=data)  # сохраняем как hash
+        self.r.expire(key, ttl)  # Устанавливаем TTL
+        logger.debug(f"Created session {session_id} with TTL {ttl}s")
         return session_id
 
-    def get_session(self, session_id: str) -> dict:
+    def get_session(self, session_id: str) -> dict | None:
         """
         Возвращает сессию по ее идентификатору.
 
         :param session_id: идентификатор сессии
         :return: словарь с данными сессии или None, если сессия не существует
         """
-        raw = self.r.hgetall(self.get_session_key(session_id))
-        return prepare_context_response(raw)
+        key = self.get_session_key(session_id)
+        # Проверяем существование ключа перед получением
+        if not self.r.exists(key):
+            return None
+        
+        raw = self.r.hgetall(key)
+        result = prepare_context_response(raw)
+        
+        # Дополнительная проверка: если ключ существует, но пустой
+        if not result:
+            logger.warning(f"Session key {key} exists but is empty")
+            return None
+            
+        return result
 
     def update_session(self, session_id: str, data: dict, ttl: int = 3600):
+        """
+        Обновляет сессию и продлевает TTL
+        
+        :param session_id: идентификатор сессии
+        :param data: данные для обновления
+        :param ttl: время жизни сессии в секундах (по умолчанию 3600)
+        """
         key = self.get_session_key(session_id)
         if data:
             self.r.hset(key, mapping=dump_context(data))
+            # Обновляем TTL при каждом обновлении сессии
+            self.r.expire(key, ttl)
+            logger.debug(f"Session {session_id} updated with TTL {ttl}s")
 
     def delete_session(self, session_id: str):
         self.r.delete(self.get_session_key(session_id))
