@@ -7,6 +7,7 @@ from .builders.base import BaseHandlersCreator
 from .builders.technical import WorkflowTechnicalHandlersCreator
 from .builders.integration import WorkflowIntegrationHandlersCreator
 from .builders.screen import WorkflowScreenHandlersCreator
+from .builders.subflow import WorkflowSubflowHandlersCreator
 
 
 StateModel = TypeVar("StateModel")
@@ -19,6 +20,7 @@ class StateTypeEnum(str, Enum):
     technical = "technical"
     integration = "integration"
     service = "service"
+    subflow = "subflow"
 
 
 state_mapping: dict[StateTypeEnum, Type[BaseHandlersCreator]] = {
@@ -26,4 +28,5 @@ state_mapping: dict[StateTypeEnum, Type[BaseHandlersCreator]] = {
     StateTypeEnum.integration: WorkflowIntegrationHandlersCreator,
     StateTypeEnum.screen: WorkflowScreenHandlersCreator,
     StateTypeEnum.service: WorkflowServiceHandlersCreator,
+    StateTypeEnum.subflow: WorkflowSubflowHandlersCreator,
 }

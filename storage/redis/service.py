@@ -57,6 +57,24 @@ class RedisCache(metaclass=GeneralPurposeSingletonMeta):
         logger.debug(f"Created session {session_id} with TTL {ttl}s")
         return session_id
 
+    def init_session(self, session_id: str, data: dict, ttl: int = 3600):
+        """
+        Инициализирует сессию с заданным ID (используется для сабфлоу).
+
+        :param session_id: идентификатор сессии
+        :param data: словарь с данными сессии
+        :param ttl: время жизни сессии в секундах (по умолчанию 3600)
+        """
+        key = self.get_session_key(session_id)
+        self.r.hset(key, mapping=dump_context(data))
+        self.r.expire(key, ttl)
+        logger.debug(f"Initialized session {session_id} with TTL {ttl}s")
+
+        # Initialize state for the session
+        state_key = self.get_session_state_key(session_id)
+        self.r.hset(state_key, mapping={"name": settings.SERVICE_INIT_STATE, "type": "service"})
+        self.r.expire(state_key, ttl)
+
     def get_session(self, session_id: str) -> dict | None:
         """
         Возвращает сессию по ее идентификатору.

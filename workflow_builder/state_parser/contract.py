@@ -6,6 +6,7 @@ from workflow_builder.states import (
     ScreenState,
     ServiceState,
     TechnicalState,
+    SubflowState,
 )
 from config import settings
 
@@ -46,12 +47,22 @@ class IntegrationExpressionModel(BaseModel):
         return self
 
 
+class SubflowExpressionModel(BaseModel):
+    """Model for subflow invocation - calling another workflow as a subprocess"""
+    variable: str  # variable to store subflow result
+    subflow_workflow_id: str  # ID of the workflow to call
+    input_mapping: Optional[dict[str, str]] = None  # Map parent vars to subflow vars: {"subflow_var": "parent_var"}
+    output_mapping: Optional[dict[str, str]] = None  # Map subflow vars back to parent: {"parent_var": "subflow_var"}
+    dependent_variables: Optional[list[str]] = None  # Variables needed from parent context
+    error_variable: Optional[str] = None  # Variable to store error if subflow fails
+
+
 class EventModel(BaseModel):
     event_name: str
 
 
 class StateModel(BaseModel):
-    state_type: Literal["technical", "integration", "screen", "service"]
+    state_type: Literal["technical", "integration", "screen", "service", "subflow"]
     name: str
     screen: dict = {}
     transitions: list[TransitionModel] = []
@@ -59,6 +70,7 @@ class StateModel(BaseModel):
         Union[
             TechnicalExpressionModel,
             IntegrationExpressionModel,
+            SubflowExpressionModel,
             EventModel
         ]
     ] = []
@@ -127,4 +139,5 @@ STATE_CLASSES = {
     "integration": IntegrationState,
     "screen": ScreenState,
     "service": ServiceState,
+    "subflow": SubflowState,
 }

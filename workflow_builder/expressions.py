@@ -282,6 +282,46 @@ class IntegrationStateExpression(BaseStateExpression):
     type_: ClassVar[StateTypeEnum] = StateTypeEnum.integration
 
 
+@define(slots=True)
+class SubflowStateExpression(BaseStateExpression):
+    """
+    Subflow state expression for calling another workflow as a subprocess
+
+    Attributes:
+        variable (str): variable to store subflow result/status
+        subflow_workflow_id (str): ID of the workflow to call as subflow
+        input_mapping (Optional[dict[str, str]]): Map parent vars to subflow: {"subflow_var": "parent_var"}
+        output_mapping (Optional[dict[str, str]]): Map subflow results back: {"parent_var": "subflow_var"}
+        dependent_variables (list[str]): Variables needed from parent context
+        error_variable (Optional[str]): Variable to store error if subflow fails
+
+    Examples:
+        >>> expr = Expression.subflow(
+        ...     variable="insurance_result",
+        ...     subflow_workflow_id="67890abcdef",
+        ...     input_mapping={"customer_id": "user_id", "product": "phone_model"},
+        ...     output_mapping={"insurance_offer": "offer_data"},
+        ...     dependent_variables=["user_id", "phone_model"]
+        ... )
+    """
+
+    variable: str = field(validator=validators.instance_of(str))
+    subflow_workflow_id: str = field(validator=validators.instance_of(str))
+    input_mapping: Optional[dict[str, str]] = field(
+        default=None, validator=validators.optional(validators.instance_of(dict))
+    )
+    output_mapping: Optional[dict[str, str]] = field(
+        default=None, validator=validators.optional(validators.instance_of(dict))
+    )
+    dependent_variables: list[str] = field(
+        factory=list, validator=validators.instance_of(list)
+    )
+    error_variable: Optional[str] = field(
+        default=None, validator=validators.optional(validators.instance_of(str))
+    )
+    type_: ClassVar[StateTypeEnum] = StateTypeEnum.subflow
+
+
 class Expression:
     """Helper class to create state expressions"""
 
@@ -330,78 +370,22 @@ class Expression:
             ),
         )
 
-
-class TechnicalAndExpression(LogicalExpressionMixin, BaseStateExpression):
-    """
-    TechnicalAndExpression is a logical expression that represents
-    a conjunction of expressions. It is a subclass of BaseStateExpression
-    and LogicalExpressionMixin.
-
-    Attributes:
-        dependent_variables (list[str]): a list of dependent variables
-        expression (list[Union[str, list[str]]]): a list of python execution lambda
-
-    Methods:
-        execute (SessionContext, **kwargs): execute expression (must be overridden by subclasses)
-
-    Notes:
-        TechnicalAndExpression is a subclass of BaseStateExpression
-        and LogicalExpressionMixin. It represents a logical AND operation
-        between multiple expressions.
-
-    Examples:
-        >>> from workflow_builder.expressions import Expression
-        >>> expr = Expression.technical(dependent_variables=["balance"], expression="balance>0") & Expression.technical(dependent_variables=["x"], expression="x>0")
-        >>> expr.variable
-        'balance'
-        >>> expr.dependent_variables
-        ['balance', 'x']
-        >>> expr.expression
-        ['balance>0', 'x>0']
-
-    """
-
-    __slots__ = ("dependent_variables", "expression")
-
-    def __init__(self, dependent_vars, expressions):
-        self.dependent_variables = dependent_vars
-        self.expression = expressions
-        super().__init__()
-
-
-class TechnicalOrExpression(LogicalExpressionMixin, BaseStateExpression):
-    """
-    TechnicalOrExpression is a logical expression that represents
-    a disjunction of expressions. It is a subclass of BaseStateExpression
-    and LogicalExpressionMixin.
-
-    Attributes:
-        dependent_variables (list[str]): a list of dependent variables
-        expression (list[Union[str, list[str]]]): a list of python execution lambda
-
-    Methods:
-        execute (SessionContext, **kwargs): execute expression (must be overridden by subclasses)
-
-    Notes:
-        TechnicalOrExpression is a subclass of BaseStateExpression
-        and LogicalExpressionMixin. It represents a logical OR operation
-        between multiple expressions.
-
-    Examples:
-        >>> from workflow_builder.expressions import Expression
-        >>> expr = Expression.technical(dependent_variables=["balance"], expression="balance>0") | Expression.technical(dependent_variables=["x"], expression="x>0")
-        >>> expr.variable
-        'balance'
-        >>> expr.dependent_variables
-        ['balance', 'x']
-        >>> expr.expression
-        ['balance>0', 'x>0']
-
-    """
-
-    __slots__ = ("dependent_variables", "expression")
-
-    def __init__(self, dependent_vars, expressions):
-        self.dependent_variables = dependent_vars
-        self.expression = expressions
-        super().__init__()
+    @classmethod
+    def subflow(
+        cls,
+        *,
+        variable: str,
+        subflow_workflow_id: str,
+        input_mapping: Optional[dict[str, str]] = None,
+        output_mapping: Optional[dict[str, str]] = None,
+        dependent_variables: list[str] = None,
+        error_variable: Optional[str] = None
+    ) -> "SubflowStateExpression":
+        return SubflowStateExpression(
+            variable=variable,
+            subflow_workflow_id=subflow_workflow_id,
+            input_mapping=input_mapping,
+            output_mapping=output_mapping,
+            dependent_variables=dependent_variables or [],
+            error_variable=error_variable
+        )

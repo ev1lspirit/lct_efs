@@ -167,3 +167,8 @@ class ServiceState(WorkflowState):
         if not screen_data:
             raise ValueError(f"Screen '{self.name}' not found in Redis")
         return json.loads(screen_data)
+
+
+class SubflowState(WorkflowState):
+    """State for calling another workflow as a subprocess"""
+    type_ = StateTypeEnum.subflow

@@ -170,6 +170,12 @@ class Automaton:
                             logger.info(f"Raw result has no 'content' attribute, using as-is")
                             logger.info(f"Result type: {type(result).__name__}, value: {result}")
                         logger.info(f"About to save to context['{variable}']")
+                    elif self.current_state.type_ == StateTypeEnum.subflow:
+                        # Для subflow states выполняем сабфлоу и сохраняем результат
+                        logger.info(f"Executing subflow state for variable: {variable}")
+                        result = expression.result()
+                        logger.info(f"Subflow result type: {type(result).__name__}")
+                        logger.info(f"Subflow execution status: {result.get('status') if isinstance(result, dict) else 'N/A'}")
                     else:
                         # For technical states, save the result as is (do not convert to string)
                         result = expression.result()

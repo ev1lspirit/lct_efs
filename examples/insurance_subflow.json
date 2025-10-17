@@ -1,0 +1,128 @@
+{
+  "states": [
+    {
+      "state_type": "technical",
+      "name": "InitInsurance",
+      "transitions": [
+        {
+          "variable": "init_done",
+          "case": "True",
+          "state_id": "CalculatePremium"
+        }
+      ],
+      "expressions": [
+        {
+          "variable": "base_url",
+          "dependent_variables": [],
+          "expression": "'https://api.insurance.example.com'"
+        },
+        {
+          "variable": "init_done",
+          "dependent_variables": [],
+          "expression": "'True'"
+        }
+      ],
+      "initial_state": true,
+      "final_state": false
+    },
+    {
+      "state_type": "technical",
+      "name": "CalculatePremium",
+      "transitions": [
+        {
+          "variable": "premium_calculated",
+          "case": "True",
+          "state_id": "ShowInsuranceOffer"
+        }
+      ],
+      "expressions": [
+        {
+          "variable": "monthly_premium",
+          "dependent_variables": ["product_price"],
+          "expression": "float(product_price) * 0.05"
+        },
+        {
+          "variable": "coverage_amount",
+          "dependent_variables": ["product_price"],
+          "expression": "float(product_price) * 1.5"
+        },
+        {
+          "variable": "premium_calculated",
+          "dependent_variables": [],
+          "expression": "'True'"
+        }
+      ],
+      "initial_state": false,
+      "final_state": false
+    },
+    {
+      "state_type": "screen",
+      "name": "ShowInsuranceOffer",
+      "screen": {
+        "title": "Предложение страховки",
+        "type": "offer",
+        "description": "Защитите ваше устройство",
+        "actions": [
+          {"id": "accept", "label": "Принять"},
+          {"id": "decline", "label": "Отказаться"}
+        ]
+      },
+      "transitions": [
+        {
+          "variable": null,
+          "case": null,
+          "state_id": "SaveDecision"
+        }
+      ],
+      "events": [
+        {"event_name": "accept"},
+        {"event_name": "decline"}
+      ],
+      "expressions": [
+        {"event_name": "accept"},
+        {"event_name": "decline"}
+      ],
+      "initial_state": false,
+      "final_state": false
+    },
+    {
+      "state_type": "technical",
+      "name": "SaveDecision",
+      "transitions": [
+        {
+          "variable": "decision_saved",
+          "case": "True",
+          "state_id": "CompleteInsurance"
+        }
+      ],
+      "expressions": [
+        {
+          "variable": "accepted",
+          "dependent_variables": ["insurance_action"],
+          "expression": "insurance_action == 'accept'"
+        },
+        {
+          "variable": "monthly_premium",
+          "dependent_variables": ["accepted", "monthly_premium"],
+          "expression": "monthly_premium if accepted else 0"
+        },
+        {
+          "variable": "decision_saved",
+          "dependent_variables": [],
+          "expression": "'True'"
+        }
+      ],
+      "initial_state": false,
+      "final_state": false
+    },
+    {
+      "state_type": "technical",
+      "name": "CompleteInsurance",
+      "transitions": [],
+      "expressions": [],
+      "initial_state": false,
+      "final_state": true
+    }
+  ]
+}
+

@@ -295,3 +295,111 @@ class IntegrationHandler(BaseHandler):
             logger.debug(f"Response is a list with {len(response)} items")
         
         return response
+
+
+@define(slots=True)
+class SubflowHandler(BaseHandler):
+    """Handler for executing subflow (calling another workflow as subprocess)"""
+    metadata: "SubflowStateExpression"
+    context: "SessionContext"
+
+    @check_context_consistency
+    def result(self):
+        """
+        Execute subflow by creating a new automaton instance for the subflow workflow
+
+        Returns:
+            dict: Subflow execution result with status and output variables
+        """
+        from workflow_builder.automaton.automaton import Automaton
+        from storage.redis.service import RedisCache
+        import uuid
+        import json
+
+        logger.info(f"🔄 Starting subflow execution: {self.metadata.subflow_workflow_id}")
+
+        # Create a new session for the subflow
+        subflow_session_id = f"subflow_{uuid.uuid4().hex}"
+        redis_cache = RedisCache()
+
+        # Prepare subflow context by mapping parent variables to subflow variables
+        subflow_context = {}
+        if self.metadata.input_mapping:
+            for subflow_var, parent_var in self.metadata.input_mapping.items():
+                if parent_var not in self.context.session:
+                    logger.warning(f"Parent variable '{parent_var}' not found in context for subflow input")
+                    continue
+                subflow_context[subflow_var] = self.context.session[parent_var]
+                logger.debug(f"Mapped {parent_var} -> {subflow_var}: {subflow_context[subflow_var]}")
+
+        # Store parent workflow info in subflow context for potential return
+        subflow_context["__parent_workflow_id"] = self.context._workflow_id
+        subflow_context["__parent_session_id"] = self.context._session_id
+        subflow_context["__is_subflow"] = True
+
+        logger.info(f"Subflow context prepared with {len(subflow_context)} variables")
+
+        try:
+            # Initialize subflow session in Redis
+            subflow_context["__workflow_id"] = self.metadata.subflow_workflow_id
+            redis_cache.init_session(subflow_session_id, subflow_context)
+            logger.debug(f"Subflow session initialized: {subflow_session_id}")
+
+            # Create and run the subflow automaton
+            subflow_automaton = Automaton(
+                session_id=subflow_session_id,
+                workflow_id=self.metadata.subflow_workflow_id
+            )
+
+            logger.info(f"Executing subflow automaton...")
+            subflow_result = subflow_automaton.run(event_name=None)
+
+            # Retrieve final subflow context
+            subflow_final_context = redis_cache.get_session(subflow_session_id)
+            logger.info(f"Subflow completed successfully")
+
+            # Map subflow output variables back to parent context
+            if self.metadata.output_mapping:
+                for parent_var, subflow_var in self.metadata.output_mapping.items():
+                    if subflow_var in subflow_final_context:
+                        with self.context as ctx:
+                            ctx[parent_var] = subflow_final_context[subflow_var]
+                        logger.debug(f"Mapped subflow output: {subflow_var} -> {parent_var}")
+                    else:
+                        logger.warning(f"Subflow variable '{subflow_var}' not found in subflow context")
+
+            # Store subflow result
+            result = {
+                "status": "completed",
+                "subflow_session_id": subflow_session_id,
+                "final_state": subflow_result.get("current_state") if isinstance(subflow_result, dict) else None
+            }
+
+            logger.info(f"✅ Subflow execution completed: {self.metadata.subflow_workflow_id}")
+            return result
+
+        except Exception as e:
+            logger.error(f"❌ Subflow execution failed: {str(e)}", exc_info=True)
+
+            # Store error in error_variable if specified
+            if self.metadata.error_variable:
+                error_info = {
+                    "error": True,
+                    "message": str(e),
+                    "subflow_workflow_id": self.metadata.subflow_workflow_id,
+                    "subflow_session_id": subflow_session_id
+                }
+                with self.context as ctx:
+                    ctx[self.metadata.error_variable] = error_info
+                logger.info(f"Error saved to context variable: {self.metadata.error_variable}")
+
+            return {
+                "status": "failed",
+                "error": str(e),
+                "subflow_session_id": subflow_session_id
+            }
+        finally:
+            # Cleanup: optionally delete subflow session from Redis
+            # Commented out to allow debugging; enable if needed
+            # redis_cache.delete_session(subflow_session_id)
+            pass

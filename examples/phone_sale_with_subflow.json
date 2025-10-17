@@ -1,0 +1,168 @@
+{
+  "states": [
+    {
+      "state_type": "technical",
+      "name": "InitPhoneSale",
+      "transitions": [
+        {
+          "variable": "init_done",
+          "case": "True",
+          "state_id": "SelectPhone"
+        }
+      ],
+      "expressions": [
+        {
+          "variable": "user_id",
+          "dependent_variables": [],
+          "expression": "'USR001'"
+        },
+        {
+          "variable": "init_done",
+          "dependent_variables": [],
+          "expression": "'True'"
+        }
+      ],
+      "initial_state": true,
+      "final_state": false
+    },
+    {
+      "state_type": "screen",
+      "name": "SelectPhone",
+      "screen": {
+        "title": "Выберите телефон",
+        "type": "catalog",
+        "description": "Каталог телефонов для покупки",
+        "items": [
+          {"id": "1", "model": "iPhone 15 Pro", "price": 89990},
+          {"id": "2", "model": "Samsung S24", "price": 79990},
+          {"id": "3", "model": "Google Pixel 8", "price": 69990}
+        ]
+      },
+      "transitions": [
+        {
+          "variable": null,
+          "case": null,
+          "state_id": "SavePhoneSelection"
+        }
+      ],
+      "events": [
+        {"event_name": "phone_selected"}
+      ],
+      "expressions": [
+        {"event_name": "phone_selected"}
+      ],
+      "initial_state": false,
+      "final_state": false
+    },
+    {
+      "state_type": "technical",
+      "name": "SavePhoneSelection",
+      "transitions": [
+        {
+          "variable": "selection_saved",
+          "case": "True",
+          "state_id": "OfferInsurance"
+        }
+      ],
+      "expressions": [
+        {
+          "variable": "phone_model",
+          "dependent_variables": ["selected_phone"],
+          "expression": "selected_phone.get('model', 'Unknown')"
+        },
+        {
+          "variable": "phone_price",
+          "dependent_variables": ["selected_phone"],
+          "expression": "selected_phone.get('price', 0)"
+        },
+        {
+          "variable": "selection_saved",
+          "dependent_variables": [],
+          "expression": "'True'"
+        }
+      ],
+      "initial_state": false,
+      "final_state": false
+    },
+    {
+      "state_type": "subflow",
+      "name": "OfferInsurance",
+      "transitions": [
+        {
+          "variable": "insurance_result",
+          "case": null,
+          "state_id": "ProcessPayment"
+        },
+        {
+          "variable": "insurance_error",
+          "case": null,
+          "state_id": "ProcessPayment"
+        }
+      ],
+      "expressions": [
+        {
+          "variable": "insurance_result",
+          "subflow_workflow_id": "INSURANCE_WORKFLOW_ID_HERE",
+          "input_mapping": {
+            "customer_id": "user_id",
+            "product_type": "phone_model",
+            "product_price": "phone_price"
+          },
+          "output_mapping": {
+            "insurance_accepted": "accepted",
+            "insurance_premium": "monthly_premium"
+          },
+          "dependent_variables": ["user_id", "phone_model", "phone_price"],
+          "error_variable": "insurance_error"
+        }
+      ],
+      "initial_state": false,
+      "final_state": false
+    },
+    {
+      "state_type": "technical",
+      "name": "ProcessPayment",
+      "transitions": [
+        {
+          "variable": "payment_calculated",
+          "case": "True",
+          "state_id": "ShowReceipt"
+        }
+      ],
+      "expressions": [
+        {
+          "variable": "insurance_cost",
+          "dependent_variables": ["insurance_premium"],
+          "expression": "float(insurance_premium) if insurance_premium else 0.0"
+        },
+        {
+          "variable": "total_amount",
+          "dependent_variables": ["phone_price", "insurance_cost"],
+          "expression": "float(phone_price) + float(insurance_cost)"
+        },
+        {
+          "variable": "payment_calculated",
+          "dependent_variables": [],
+          "expression": "'True'"
+        }
+      ],
+      "initial_state": false,
+      "final_state": false
+    },
+    {
+      "state_type": "screen",
+      "name": "ShowReceipt",
+      "screen": {
+        "title": "Чек покупки",
+        "type": "receipt",
+        "description": "Спасибо за покупку!"
+      },
+      "transitions": [],
+      "events": [],
+      "expressions": [],
+      "initial_state": false,
+      "final_state": true
+    }
+  ]
+}
+
