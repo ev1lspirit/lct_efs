@@ -107,6 +107,9 @@ class CommonAdapter:
     async def put(self, endpoint: str, response_model: Type[T] | None = None, **kwargs):
         return await self._request_handler("put", endpoint, response_model, **kwargs)
 
+    async def patch(self, endpoint: str, response_model: Type[T] | None = None, **kwargs):
+        return await self._request_handler("patch", endpoint, response_model, **kwargs)
+
     async def delete(self, endpoint: str, response_model: Type[T] | None = None, **kwargs):
         return await self._request_handler("delete", endpoint, response_model, **kwargs)
 
