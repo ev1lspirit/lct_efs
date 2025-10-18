@@ -1,7 +1,8 @@
 from functools import partial
 import logging
 import re
-from typing import TYPE_CHECKING
+from types import CoroutineType
+from typing import TYPE_CHECKING, Any, Callable
 from attrs import define, field
 from workflow_builder.models import StateTypeEnum
 

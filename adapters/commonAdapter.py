@@ -50,7 +50,6 @@ class CommonAdapter:
     retries: int = field(default=3)
     backoff: float = field(default=1.0)
 
-
     @property
     def default_headers(self) -> dict[str, str]:
         return {
@@ -92,10 +91,10 @@ class CommonAdapter:
             session_method = getattr(session, method)
             async with session_method(
                 url,
-                json=kwargs,
                 headers=self.headers or self.default_headers,
                 timeout=ClientTimeout(self.timeout),
-                ssl=False
+                ssl=False,
+                **kwargs
             ) as response:
                 return await self.__process_response(response, response_model)
 

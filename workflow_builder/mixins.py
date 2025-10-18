@@ -63,11 +63,11 @@ class ParameterInterpolationMixin:
 
         return {key: interpolate_value(value) for key, value in params.items()}
 
-    def interpolate_url(self, session: dict):
+    def interpolate_url(self, url: str, session: dict):
         # Интерполируем URL - заменяем {{variable}} в самом URL
-        interpolated_url = self.metadata.url
+        interpolated_url = url
         url_variables_found = []
-        for match in re.finditer(r"\{\{(\w+)\}\}", self.metadata.url):
+        for match in re.finditer(r"\{\{(\w+)\}\}", interpolated_url):
             var_name = match.group(1)
             url_variables_found.append(var_name)
             if var_name not in session:
@@ -78,6 +78,18 @@ class ParameterInterpolationMixin:
             context_value = session[var_name]
             interpolated_url = interpolated_url.replace(
                 f"{{{{{var_name}}}}}", str(context_value)
+            )
+        return interpolated_url
+
+    def context_interpolation(self, url: str, session: dict):
+        interpolated_url = url
+        url_variables_found = []
+        for match in re.finditer(r"\$\{(\w+)\}", interpolated_url):
+            var_name = match.group(1)
+            url_variables_found.append(var_name)
+            context_value = session[var_name]
+            interpolated_url = interpolated_url.replace(
+                "${%s}" % var_name, str(context_value)
             )
         return interpolated_url
 
