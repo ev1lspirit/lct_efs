@@ -70,6 +70,15 @@ class SessionContext:
 
     async def get_session_state(self):
         state_meta = await self._redis_cache.get_state(self._session_id)
+        
+        # Handle case when Redis is unavailable or no state is cached
+        if state_meta is None:
+            logger.warning(
+                f"No cached state found for session {self._session_id}, "
+                f"returning default service init state"
+            )
+            state_meta = {}
+        
         return StateMetadata(
             name=state_meta.get("name", settings.SERVICE_INIT_STATE),
             type_=StateTypeEnum(state_meta.get("type", "service")),

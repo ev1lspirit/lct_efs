@@ -104,8 +104,9 @@ class Automaton(TransitionCandidateSearcherMixin, ExpressionEvaluatorMixin):
 
     async def run(self, event_name: Optional[str]):
         logger.info("=" * 80)
+        logger.info(self)
         logger.info(
-            f"🚀 STARTING WORKFLOW EXECUTION | Session: {self._session_id[:8]}... | Workflow: {self._workflow_id[:8]}..."
+            f"🚀 STARTING WORKFLOW EXECUTION | Session: {self.session_id[:8]}... | Workflow: {self.workflow_id[:8]}..."
         )
         logger.info(
             f"📍 Initial state: '{self.current_state.name}' ({self.current_state.type_.value})"
@@ -148,7 +149,7 @@ class Automaton(TransitionCandidateSearcherMixin, ExpressionEvaluatorMixin):
                     f"⏱️  Executing {self.current_state.type_.value} state: '{self.current_state.name}'"
                 )
                 evaluator = self.evaluator(event_name=event_name)
-                evaluator()
+                await evaluator()
 
                 # Замеряем время выполнения и логируем
                 state_execution_time = time.time() - state_start_time

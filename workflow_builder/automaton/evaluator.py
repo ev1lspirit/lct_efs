@@ -73,10 +73,10 @@ class ExpressionEvaluatorMixin:
                 result = await self.__evaluate_expression(expression, variable, event_name)
                 context[variable] = result
 
-    def _evaluate_service_executables(self):
+    async def _evaluate_service_executables(self):
         for expression in self.current_state.executables:
             try:
-                expression.result()
+                await expression.result()
             except Exception as e:
                 raise RuntimeError(f"Failed to evaluate expression: {str(e)}")
 

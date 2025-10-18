@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from enum import Enum
 from functools import wraps
+import asyncio
 import inspect
 import logging
 from urllib.parse import urlparse
@@ -124,9 +125,9 @@ class DependencyHandler(BaseHandler):
     context: "SessionContext"
     behaviour_type: BehaviourTypeEnum = field(default=BehaviourTypeEnum.init)
 
-    def result(self):
+    async def result(self):
         if self.behaviour_type == BehaviourTypeEnum.init:
-            return self.init_result()
+            return await self.init_result()
         elif self.behaviour_type == BehaviourTypeEnum.error:
             return self.error_result()
         else:
@@ -135,29 +136,80 @@ class DependencyHandler(BaseHandler):
     def error_result(self):
         return
 
-    def init_result(self):
-        context_key = self.metadata.redis_client.get_wf_context_key(
+    async def init_result(self):
+        """
+        Инициализирует workflow context из Redis или MongoDB.
+        Гарантирует возврат dict.
+        """
+        context_key = self.metadata.redis_client.workflow_context_key(
             session_id=self.context._workflow_id
         )
-        if not self.metadata.redis_client.redis.exists(context_key):
+        
+        # Проверяем существование контекста в Redis
+        exists_in_redis = await self.metadata.redis_client.redis.exists(context_key)
+        
+        if not exists_in_redis:
+            # Контекст не существует в Redis, загружаем из Mongo
+            logger.debug(f"Workflow context not found in Redis, loading from MongoDB: {self.context._workflow_id}")
             workflow_context = self.metadata.mongo_client.get(self.context._workflow_id)
+            
             if not isinstance(workflow_context, dict):
-                logger.error(f"Workflow context {self.context._workflow_id} not found")
+                logger.error(f"Workflow context {self.context._workflow_id} not found in MongoDB")
                 raise ValueError(
                     f"Workflow context for {self.context._workflow_id} not found"
                 )
-
+            
+            # Сохраняем в Redis для будущих запросов (асинхронно, не ждём результата)
             wf_context_json = dump_context(workflow_context)
-            self.metadata.redis_client.set_workflow_context(
-                session_id=self.context._workflow_id, context=wf_context_json
+            await self.metadata.redis_client.set_workflow_context(
+                session_id=self.context._workflow_id, 
+                context=wf_context_json
             )
+            logger.debug(f"Saved workflow context to Redis: {self.context._workflow_id}")
         else:
-            workflow_context = self.metadata.redis_client.get_workflow_context(
+            # Контекст существует в Redis, получаем его
+            logger.debug(f"Loading workflow context from Redis: {self.context._workflow_id}")
+            workflow_context = await self.metadata.redis_client.get_workflow_context(
                 session_id=self.context._workflow_id
             )
-        if not (workflow_context.keys() & self.context.session.keys()):
-            with self.context as context:
-                context.update(workflow_context)
+            logger.debug(f"Got workflow_context type: {type(workflow_context)}, value: {workflow_context}")
+        
+        # Проверяем и нормализуем результат
+        logger.debug(f"Checking workflow_context - is coroutine: {asyncio.iscoroutine(workflow_context)}")
+        
+        if asyncio.iscoroutine(workflow_context):
+            logger.error(
+                f"⚠️ CRITICAL: workflow_context is a coroutine, not a dict! "
+                f"Missing await somewhere. Workflow: {self.context._workflow_id}"
+            )
+            # Пытаемся дождаться корутину
+            try:
+                workflow_context = await workflow_context
+                logger.info(f"Successfully awaited the coroutine, new type: {type(workflow_context)}")
+            except Exception as e:
+                logger.error(f"Failed to await coroutine: {e}")
+                workflow_context = {}
+        
+        if workflow_context is None:
+            logger.warning(
+                f"Workflow context is None for {self.context._workflow_id}, using empty dict"
+            )
+            workflow_context = {}
+        elif not isinstance(workflow_context, dict):
+            logger.error(
+                f"Workflow context has invalid type: {type(workflow_context).__name__}, "
+                f"expected dict. Using empty dict. Value: {workflow_context}"
+            )
+            workflow_context = {}
+        
+        # Обновляем session context новыми ключами из workflow context
+        if workflow_context:
+            new_keys = workflow_context.keys() - self.context.session.keys()
+            if new_keys:
+                logger.debug(f"Updating session context with new keys: {new_keys}")
+                with self.context as context:
+                    context.update(workflow_context)
+        
         return workflow_context
 
 

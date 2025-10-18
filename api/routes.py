@@ -37,7 +37,7 @@ async def save_workflow(
         f"Starting workflow save process. States count: {len(body.states.states)}"
     )
     try:
-        breakpoint()
+        # breakpoint()
         validator = AutomatonValidator(states=body.states.states)
         validator.run()
         #mongo_client = next(get_mongo_client_as_dependency())

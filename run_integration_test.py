@@ -64,11 +64,12 @@ def save_workflow(workflow: dict) -> Optional[str]:
     url = f"{BASE_URL}/workflow/save"
 
     try:
-        # API expects SaveWorkflowRequest: {"states": [...], "predefined_context": {}}
+        # API expects SaveWorkflowRequest: {"states": {"states": [...]}, "predefined_context": {}}
+        # StateSet validator accepts both list and {"states": [...]} format
         response = requests.post(
             url,
             json={
-                "states": workflow["states"],
+                "states": {"states": workflow["states"]},  # Wrap in StateSet format
                 "predefined_context": {}
             },
             headers={"Content-Type": "application/json"},
@@ -83,9 +84,16 @@ def save_workflow(workflow: dict) -> Optional[str]:
         else:
             print_error(f"Ошибка сохранения workflow: {response.status_code}")
             print_error(f"Ответ: {response.text}")
+            try:
+                error_detail = response.json()
+                print_error(f"Детали: {json.dumps(error_detail, indent=2, ensure_ascii=False)}")
+            except:
+                pass
             return None
     except Exception as e:
         print_error(f"Исключение при сохранении: {e}")
+        import traceback
+        traceback.print_exc()
         return None
 
 

@@ -279,7 +279,7 @@ def test_integration_states_complete():
                     {
                         "variable": "summary",
                         "url": "https://jsonplaceholder.typicode.com/posts",
-                        "params": {
+                        "body": {
                             "title": "Order Summary for User {{user_id}}",
                             "body": "Summary of orders",
                             "userId": "{{user_id}}"
@@ -1462,7 +1462,7 @@ def test_integration_interpolation_advanced():
                     {
                         "variable": "response",
                         "url": "https://jsonplaceholder.typicode.com/posts",
-                        "params": {
+                        "body": {
                             "title": "{{first_name}} {{last_name}}",
                             "body": "User from {{city}}",
                             "email": "{{email}}",
