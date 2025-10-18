@@ -1,7 +1,6 @@
 from abc import ABC, abstractmethod
 from enum import Enum
 from functools import wraps
-import asyncio
 import inspect
 import logging
 from urllib.parse import urlparse
@@ -19,10 +18,9 @@ logger = logging.getLogger(__name__)
 if TYPE_CHECKING:
     from context import SessionContext
     from workflow_builder.expressions import (
-        IntegrationStateExpression,
         TechnicalStateExpression,
         ScreenStateExpression,
-        ServiceStateExpression,
+        ServiceStateExpression
     )
 
 HandlerClass = TypeVar("HandlerClass")
@@ -222,7 +220,13 @@ class IntegrationHandler(ParameterInterpolationMixin, BaseHandler):
     @check_context_consistency
     async def result(self):  # type: ignore
         context = await self.context.session()
-        interpolated_url = self.interpolate_url(context)
+        variable_interpolated_url = self.context_interpolation(
+            url=self.metadata.url, session=context
+        )
+        interpolated_url = self.interpolate_url(
+            url=variable_interpolated_url, session=context
+        )
+
         base_url, endpoint = self._split_url(interpolated_url)
         logger.info(f"Base URL: {base_url}, Endpoint: {endpoint}")
 

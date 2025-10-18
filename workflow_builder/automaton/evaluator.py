@@ -1,7 +1,8 @@
 from functools import partial
 import logging
 import re
-from typing import TYPE_CHECKING
+from types import CoroutineType
+from typing import TYPE_CHECKING, Any, Callable
 from attrs import define, field
 from workflow_builder.models import StateTypeEnum
 
@@ -82,7 +83,7 @@ class ExpressionEvaluatorMixin:
             except Exception as e:
                 raise RuntimeError(f"Failed to evaluate expression: {str(e)}")
 
-    def evaluator(self, event_name: str = None):
+    def evaluator(self, event_name: str = None) -> Callable[[], CoroutineType[Any, Any, None]] | partial[CoroutineType[Any, Any, None]]:
         if self.current_state.type_ == StateTypeEnum.service:
             return self._evaluate_service_executables
         return partial(self._evaluate_executables, event_name)
