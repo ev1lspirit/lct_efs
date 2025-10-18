@@ -20,7 +20,9 @@ async def main():
 
     resp = await check_session(
         body=WorkflowRequest(
-            client_workflow_id=workflow_id, client_session_id=str(client_session_id)
+            client_workflow_id=workflow_id,
+            client_session_id=str(client_session_id),
+            context={"card_items": [{"id": "123", "price": 100}]},
         )
     )
     print(resp)

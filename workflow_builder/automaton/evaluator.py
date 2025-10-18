@@ -1,5 +1,6 @@
 from functools import partial
 import logging
+import re
 from typing import TYPE_CHECKING
 from attrs import define, field
 from workflow_builder.models import StateTypeEnum
@@ -52,7 +53,7 @@ class ExpressionEvaluatorMixin:
             elif self.current_state.type_ == StateTypeEnum.integration:
                 result = await self.__process_integration_state_evaluation(expression, variable)
             else:
-                result = expression.result()
+                result = await expression.result()
             logger.info(
                 f"Setting context['{variable}'] = {type(result).__name__}"
             )
@@ -61,6 +62,7 @@ class ExpressionEvaluatorMixin:
             raise RuntimeError(
                 f"Failed to evaluate expression for variable {variable}: {str(e)}"
             ) from e
+        return result
 
     async def _evaluate_executables(self, event_name: str = None):
         async with self.session_context as context:

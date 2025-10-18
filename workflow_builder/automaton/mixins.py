@@ -4,27 +4,25 @@ from context import SessionContext
 from workflow_builder.states import WorkflowState
 from workflow_builder.transitions import Transition
 
-
 logger = logging.getLogger(__name__)
 
 class TransitionCandidateSearcherMixin:
     session_context: SessionContext
 
-    def _get_transition_candidates_based_on_expressions(
+    async def _get_transition_candidates_based_on_expressions(
         self, current_state: "WorkflowState"
     ) -> Optional[Transition]:
         logger.info("Proceeding to next state based on expressions...")
+        context = await self.session_context.session()
         for expr in current_state.executables:
             if not expr.metadata.bindable():
                 continue
-            result = self.session_context.get(expr.metadata.variable)
+            result = await self.session_context.get(expr.metadata.variable)
             logger.debug(f"Processing expression: {expr}, result: {result}")
             executable_transitions = expr.metadata.transition_bind_object
             for transition in executable_transitions:
                 logger.debug(f"Evaluating transition: {transition}")
-                if transition.case is None or transition.matches(
-                    self.session_context.session
-                ):
+                if transition.case is None or transition.matches(context):
                     logger.info(f"Transition matched: {transition}")
                     return transition
 

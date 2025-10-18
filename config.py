@@ -62,7 +62,7 @@ class Settings:
         # Если учетные данные не заданы, подключаемся без аутентификации
         if not self.MONGO_USER or not self.MONGO_PASSWORD:
             return f"mongodb://{self.MONGO_HOST}:{self.MONGO_PORT}/"
-        
+
         return (
             f"mongodb://{self.MONGO_USER}:{self.MONGO_PASSWORD}"
             f"@{self.MONGO_HOST}:{self.MONGO_PORT}/"

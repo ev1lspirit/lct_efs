@@ -16,10 +16,9 @@ class SessionContext:
         self._session_id = session_id
         self._workflow_id = workflow_id
 
-    @property
-    def session(self):
+    async def session(self) -> dict:
         if not hasattr(self, "_session"):
-            self._session = self._get_session_context()
+            self._session = await self._get_session_context()
         return getattr(self, "_session", {})
 
     async def _get_session_context(self):
@@ -47,11 +46,12 @@ class SessionContext:
             logger.error(f"Failed to get session. Error: {e}")
             raise e
 
-    def get(self, key):
-        return self.session.get(key)
+    async def get(self, key):
+        session = await self.session()
+        return session.get(key)
 
     async def __aenter__(self):
-        return self.session
+        return await self.session()
 
     async def __aexit__(self, exc_type, exc_value, traceback):
         try:
@@ -89,8 +89,9 @@ class SessionContext:
             logger.info(
                 f"Updating session: {self._session_id} with data: {json.dumps(self._session)}"
             )
+            session = await self.session()
             flat_context = {
                 k: json.dumps(v) if isinstance(v, (dict, list)) else v
-                for k, v in self.session.items()
+                for k, v in session.items()
             }
             await self._redis_cache.update_session(self._session_id, flat_context)

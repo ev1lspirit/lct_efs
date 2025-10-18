@@ -1,6 +1,7 @@
 import asyncio
-from functools import partial
+from functools import partial, wraps
 import logging
+from textwrap import wrap
 import time
 from typing import TYPE_CHECKING, Optional
 
@@ -39,6 +40,17 @@ class Automaton(TransitionCandidateSearcherMixin, ExpressionEvaluatorMixin):
             session_id=self.session_id, workflow_id=self.workflow_id
         )
 
+    @staticmethod
+    def prohibit_run_without_entering(func):
+
+        @wraps(func)
+        async def wrapper(self, *args, **kwargs):
+            if not hasattr(self, "_entered"):
+                raise RuntimeError("Automaton not entered")
+            return await func(self, *args, **kwargs)
+
+        return wrapper
+
     async def __aenter__(self):
         self.initial_state_name = (await self._resolve_initial_state()).name
         self.state_constructor = StateConstructor(self.session_context, self.initial_state_name, self.workflow_id, self.session_id)  # type: ignore # no
@@ -46,6 +58,7 @@ class Automaton(TransitionCandidateSearcherMixin, ExpressionEvaluatorMixin):
         self.state_mapping = {state.name: state for state in self.states}
         self._current_state = self.state_mapping.get(self.zero_state)
         self._actual_initial_state = self.state_mapping[self.initial_state_name]
+        self._entered = True
         return self
 
     async def __aexit__(self, exc_type, exc_value, traceback): ...
@@ -102,6 +115,7 @@ class Automaton(TransitionCandidateSearcherMixin, ExpressionEvaluatorMixin):
             )
             return None
 
+    @prohibit_run_without_entering
     async def run(self, event_name: Optional[str]):
         logger.info("=" * 80)
         logger.info(self)
@@ -120,13 +134,14 @@ class Automaton(TransitionCandidateSearcherMixin, ExpressionEvaluatorMixin):
 
         while True:
             if self.current_state._final:
-                total_execution_time = time.time() - start_time
                 logger.info("=" * 80)
                 logger.info(
-                    f"🏁 WORKFLOW COMPLETED | Final state: '{self.current_state.name}' | "
-                    f"Time: {total_execution_time*1000:.2f}ms ({total_execution_time:.4f}s)"
+                    f"🏁 WORKFLOW COMPLETED | Final state: '{self.current_state.name}"
                 )
-                logger.info("=" * 80)
+                if self.current_state.type_ == StateTypeEnum.screen:
+                    await self._call_state_checkpoint()
+                    await self.session_context.update_session()
+                    return self.__get_screen()
                 break
 
             # Засекаем время начала выполнения состояния
@@ -158,7 +173,7 @@ class Automaton(TransitionCandidateSearcherMixin, ExpressionEvaluatorMixin):
                     f"in {state_execution_time*1000:.2f}ms ({state_execution_time:.4f}s)"
                 )
 
-                candidate = self._get_transition_candidates_based_on_expressions(
+                candidate = await self._get_transition_candidates_based_on_expressions(
                     current_state=self.current_state
                 )
             if candidate is None:

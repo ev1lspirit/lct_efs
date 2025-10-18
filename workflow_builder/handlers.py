@@ -38,19 +38,20 @@ def check_context_consistency(function: Callable):
     if "self" not in func_sig.parameters:
         raise ValueError("Function must be a method")
 
-    def _shared_logic(self):
+    async def _shared_logic(self):
         if not isinstance(self, BaseHandler):
             raise TypeError(
                 f"Expected {BaseHandler.__name__}, got {type(self).__name__}"
             )
+        session = await self.context.session()
         if hasattr(self.metadata, "dependent_variables"):
             if not all(
-                var in self.context.session for var in self.metadata.dependent_variables
+                var in session for var in self.metadata.dependent_variables
             ):
                 missing_vars = [
                     var
                     for var in self.metadata.dependent_variables
-                    if var not in self.context.session
+                    if var not in session
                 ]
                 raise ValueError(
                     f"Missing dependent variables in context: {missing_vars}"
@@ -60,7 +61,7 @@ def check_context_consistency(function: Callable):
 
         @wraps(function)
         async def wrapper_async(self, *args, **kwargs):
-            _shared_logic(self)
+            await _shared_logic(self)
             return await function(self, *args, **kwargs)
 
         return wrapper_async
@@ -100,13 +101,14 @@ class TechnicalHandler(BaseHandler):
     metadata: "TechnicalStateExpression"
     context: "SessionContext"
 
-    def result(self):
+    async def result(self):
         # Technical states should handle missing variables gracefully
         # They often check for variable existence/validity, so we don't enforce dependent_variables
+        context = await self.context.session()
         try:
             return simple_eval(
                 self.metadata.expression,
-                names=self.context.session,
+                names=context,
                 functions={"len": len, "sum": sum, "max": max, "min": min},
             )
         except Exception as e:
@@ -137,79 +139,32 @@ class DependencyHandler(BaseHandler):
         return
 
     async def init_result(self):
-        """
-        Инициализирует workflow context из Redis или MongoDB.
-        Гарантирует возврат dict.
-        """
         context_key = self.metadata.redis_client.workflow_context_key(
             session_id=self.context._workflow_id
         )
-        
-        # Проверяем существование контекста в Redis
-        exists_in_redis = await self.metadata.redis_client.redis.exists(context_key)
-        
-        if not exists_in_redis:
-            # Контекст не существует в Redis, загружаем из Mongo
-            logger.debug(f"Workflow context not found in Redis, loading from MongoDB: {self.context._workflow_id}")
+        if not await self.metadata.redis_client.redis.exists(context_key):
             workflow_context = self.metadata.mongo_client.get(self.context._workflow_id)
-            
+
             if not isinstance(workflow_context, dict):
                 logger.error(f"Workflow context {self.context._workflow_id} not found in MongoDB")
                 raise ValueError(
                     f"Workflow context for {self.context._workflow_id} not found"
                 )
-            
+
             # Сохраняем в Redis для будущих запросов (асинхронно, не ждём результата)
             wf_context_json = dump_context(workflow_context)
             await self.metadata.redis_client.set_workflow_context(
-                session_id=self.context._workflow_id, 
-                context=wf_context_json
+                session_id=self.context._workflow_id, context=wf_context_json
             )
             logger.debug(f"Saved workflow context to Redis: {self.context._workflow_id}")
         else:
-            # Контекст существует в Redis, получаем его
-            logger.debug(f"Loading workflow context from Redis: {self.context._workflow_id}")
             workflow_context = await self.metadata.redis_client.get_workflow_context(
                 session_id=self.context._workflow_id
             )
-            logger.debug(f"Got workflow_context type: {type(workflow_context)}, value: {workflow_context}")
-        
-        # Проверяем и нормализуем результат
-        logger.debug(f"Checking workflow_context - is coroutine: {asyncio.iscoroutine(workflow_context)}")
-        
-        if asyncio.iscoroutine(workflow_context):
-            logger.error(
-                f"⚠️ CRITICAL: workflow_context is a coroutine, not a dict! "
-                f"Missing await somewhere. Workflow: {self.context._workflow_id}"
-            )
-            # Пытаемся дождаться корутину
-            try:
-                workflow_context = await workflow_context
-                logger.info(f"Successfully awaited the coroutine, new type: {type(workflow_context)}")
-            except Exception as e:
-                logger.error(f"Failed to await coroutine: {e}")
-                workflow_context = {}
-        
-        if workflow_context is None:
-            logger.warning(
-                f"Workflow context is None for {self.context._workflow_id}, using empty dict"
-            )
-            workflow_context = {}
-        elif not isinstance(workflow_context, dict):
-            logger.error(
-                f"Workflow context has invalid type: {type(workflow_context).__name__}, "
-                f"expected dict. Using empty dict. Value: {workflow_context}"
-            )
-            workflow_context = {}
-        
-        # Обновляем session context новыми ключами из workflow context
-        if workflow_context:
-            new_keys = workflow_context.keys() - self.context.session.keys()
-            if new_keys:
-                logger.debug(f"Updating session context with new keys: {new_keys}")
-                with self.context as context:
-                    context.update(workflow_context)
-        
+        context = await self.context.session()
+        if not (workflow_context.keys() & context.keys()):
+            async with self.context as context:
+                context.update(workflow_context)
         return workflow_context
 
 
@@ -233,7 +188,7 @@ class IntegrationHandler(ParameterInterpolationMixin, BaseHandler):
             raise ValueError(f"Method {self.metadata.method} not found in adapter")
         return method_attr
 
-    def __process_api_error(self, response: APIError):
+    async def __process_api_error(self, response: APIError):
         logger.error(f"API request failed: {response.message}")
         if response.status_code:
             logger.error(f"Status code: {response.status_code}")
@@ -242,7 +197,7 @@ class IntegrationHandler(ParameterInterpolationMixin, BaseHandler):
 
         # Если указана переменная для ошибки, сохраняем в контекст
         if self.metadata.error_variable:
-            with self.context as ctx:
+            async with self.context as ctx:
                 ctx[self.metadata.error_variable] = response.model_dump()
             logger.info(
                 f"Error saved to context variable: {self.metadata.error_variable}"
@@ -250,10 +205,10 @@ class IntegrationHandler(ParameterInterpolationMixin, BaseHandler):
         # Возвращаем ошибку вместо исключения для возможности обработки в workflow
         return response
 
-    def __process_response(self, response):
+    async def __process_response(self, response):
         # Проверяем, является ли ответ ошибкой
         if isinstance(response, APIError):
-            return self.__process_api_error(response)
+            return await self.__process_api_error(response)
         logger.info(
             f"Integration response received successfully: {type(response).__name__}"
         )
@@ -266,13 +221,14 @@ class IntegrationHandler(ParameterInterpolationMixin, BaseHandler):
 
     @check_context_consistency
     async def result(self):  # type: ignore
-        interpolated_url = self.interpolate_url()
+        context = await self.context.session()
+        interpolated_url = self.interpolate_url(context)
         base_url, endpoint = self._split_url(interpolated_url)
         logger.info(f"Base URL: {base_url}, Endpoint: {endpoint}")
 
-        request_kwargs = self.interpolate_params(interpolated_url)
+        request_kwargs = self.interpolate_params(interpolated_url, context)
         adapter = self.adapter(base_url=base_url)
         method_ = self._get_method(adapter)
         logger.info(f"Executing adapter method: {self.metadata.method.upper()}")
         response = await method_(endpoint=endpoint, **request_kwargs)
-        return self.__process_response(response)
+        return await self.__process_response(response)

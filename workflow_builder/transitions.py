@@ -11,7 +11,7 @@ class Transition:
         self.keys: set[str] = {case}
 
     def matches(self, context: dict) -> bool:
-        return context.get(self.variable) == self.case
+        return str(context.get(self.variable)) == self.case
 
     def __and__(self, other: Transition | CompoundTransition) -> CompoundTransition:
         if self.state_id != other.state_id:
