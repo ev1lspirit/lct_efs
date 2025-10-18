@@ -149,10 +149,10 @@ async def check_session(
     #redis_cache = await get_redis_cache()
     try:
         await _get_or_create_session(body, redis_cache)
-        automaton = Automaton(
+        async with Automaton(
             session_id=body.client_session_id, workflow_id=body.client_workflow_id
-        )
-        screen_payload = await automaton.run(body.event_name)
+        ) as automaton:
+            screen_payload = await automaton.run(body.event_name)
         # Получаем обновленный контекст после выполнения workflow
         updated_context = await redis_cache.get_session(body.client_session_id)
         logger.info(
