@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from fastapi.testclient import TestClient
 from starlette.middleware.cors import CORSMiddleware
 
-from api.testWorkflow import *
+from api.tests.testWorkflow import *
 from utils import setup_logging
 from .routes import router
 

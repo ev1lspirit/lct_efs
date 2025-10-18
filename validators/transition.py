@@ -17,11 +17,12 @@ class TransitionValidator(ABC, AssertCallerMixin):
                 raise ValueError(f"Variable can't be None")
 
     def _assert_deterministic(self):
-        variables = set()
+        processed = set()
         for transition in self.state.transitions:
-            if transition.variable in variables:
+            pair = (transition.variable, transition.case)
+            if pair in processed:
                 raise ValueError(f"Automaton is not deterministic. Detected several transitions by {transition.variable}")
-            variables.add(transition.variable)
+            processed.add(pair)
 
     def __call__(self):
         for key, asserter in vars(self.__class__).items():

@@ -1,5 +1,4 @@
 from utils import AmbiguityFreeList
-from validators.mixins import AssertCallerMixin
 from .state import (
     IntegrationStateValidator,
     ScreenStateValidator,
@@ -11,7 +10,7 @@ from workflow_builder.state_parser.contract import StateModel
 from attr import define, field, validators as v
 from collections import defaultdict
 from operator import attrgetter
-from typing import Callable, Type
+from typing import Type
 from venv import logger
 
 

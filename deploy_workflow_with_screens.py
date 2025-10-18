@@ -64,7 +64,7 @@ def check_server() -> bool:
 def load_workflow_from_module() -> dict:
     """Загружает workflow из Python модуля"""
     try:
-        from api.test_integration_workflow_with_screens import test_integration_workflow_with_ui
+        from api.tests.test_integration_workflow_with_screens import test_integration_workflow_with_ui
         return test_integration_workflow_with_ui()
     except ImportError as e:
         print_error(f"Не удалось импортировать workflow: {e}")
@@ -74,7 +74,7 @@ def load_workflow_from_module() -> dict:
 def save_workflow_to_server(workflow: dict) -> Optional[str]:
     """Сохраняет workflow на сервер"""
     url = f"{BASE_URL}/workflow/save"
-    
+
     try:
         response = requests.post(
             url,
@@ -85,7 +85,7 @@ def save_workflow_to_server(workflow: dict) -> Optional[str]:
             headers={"Content-Type": "application/json"},
             timeout=30
         )
-        
+
         if response.status_code == 200:
             data = response.json()
             workflow_id = data.get("wf_description_id")
@@ -105,7 +105,7 @@ def save_workflow_to_server(workflow: dict) -> Optional[str]:
 def create_test_session(workflow_id: str) -> Optional[dict]:
     """Создает тестовую сессию"""
     session_id = f"ui-test-session-{workflow_id}"
-    
+
     try:
         response = requests.post(
             f"{BASE_URL}/client/workflow",
@@ -116,7 +116,7 @@ def create_test_session(workflow_id: str) -> Optional[dict]:
             },
             timeout=10
         )
-        
+
         if response.status_code == 200:
             data = response.json()
             print_success(f"Сессия создана: {session_id}")
@@ -140,16 +140,16 @@ def display_screen_info(screen_data: dict):
     if not screen_data or "screen" not in screen_data:
         print_warning("Нет данных экрана для отображения")
         return
-    
+
     screen = screen_data.get("screen", {})
-    
+
     print(f"\n{Colors.CYAN}{'─' * 80}{Colors.RESET}")
     print(f"{Colors.BOLD}📺 ЭКРАН: {screen.get('title', 'N/A')}{Colors.RESET}")
     print(f"{Colors.CYAN}{'─' * 80}{Colors.RESET}")
-    
+
     if "description" in screen:
         print(f"\n{screen['description']}")
-    
+
     # Поля формы
     if "fields" in screen:
         print(f"\n{Colors.BOLD}Поля формы:{Colors.RESET}")
@@ -158,7 +158,7 @@ def display_screen_info(screen_data: dict):
             print(f"  {required} {field['label']} ({field['id']})")
             if "placeholder" in field:
                 print(f"     └─ Подсказка: {field['placeholder']}")
-    
+
     # Секции
     if "sections" in screen:
         print(f"\n{Colors.BOLD}Секции:{Colors.RESET}")
@@ -167,7 +167,7 @@ def display_screen_info(screen_data: dict):
             if "fields" in section:
                 for field in section["fields"]:
                     print(f"     • {field['label']}: {field['value']}")
-    
+
     # Действия
     if "actions" in screen:
         print(f"\n{Colors.BOLD}Доступные действия:{Colors.RESET}")
@@ -175,23 +175,23 @@ def display_screen_info(screen_data: dict):
             action_type = action.get("type", "default")
             icon = "🟢" if action_type == "primary" else "⚪"
             print(f"  {icon} [{action['id']}] {action['label']} → event: {action['event']}")
-    
+
     print(f"{Colors.CYAN}{'─' * 80}{Colors.RESET}\n")
 
 
 def generate_test_instructions(session_info: dict):
     """Генерирует инструкции для тестирования"""
     print_header("📝 ИНСТРУКЦИИ ДЛЯ ТЕСТИРОВАНИЯ")
-    
+
     session_id = session_info["session_id"]
     workflow_id = session_info["workflow_id"]
-    
+
     print(f"{Colors.BOLD}Информация о сессии:{Colors.RESET}")
     print(f"  • Session ID: {Colors.CYAN}{session_id}{Colors.RESET}")
     print(f"  • Workflow ID: {Colors.CYAN}{workflow_id}{Colors.RESET}")
-    
+
     print(f"\n{Colors.BOLD}Как тестировать workflow:{Colors.RESET}\n")
-    
+
     print("1️⃣  Отправка события (заполнение формы):")
     print(f"{Colors.YELLOW}")
     print(f"""   curl -X POST {BASE_URL}/client/workflow \\
@@ -205,7 +205,7 @@ def generate_test_instructions(session_info: dict):
        }}
      }}'""")
     print(f"{Colors.RESET}")
-    
+
     print("2️⃣  Проверка текущего состояния:")
     print(f"{Colors.YELLOW}")
     print(f"""   curl -X POST {BASE_URL}/client/workflow \\
@@ -216,7 +216,7 @@ def generate_test_instructions(session_info: dict):
        "context": {{}}
      }}'""")
     print(f"{Colors.RESET}")
-    
+
     print("3️⃣  Продолжение workflow (переход дальше):")
     print(f"{Colors.YELLOW}")
     print(f"""   curl -X POST {BASE_URL}/client/workflow \\
@@ -227,7 +227,7 @@ def generate_test_instructions(session_info: dict):
        "context": {{}}
      }}'""")
     print(f"{Colors.RESET}")
-    
+
     print("\n4️⃣  Полный тестовый сценарий:")
     print(f"{Colors.GREEN}")
     print(f"""   # Шаг 1: Начальный экран (UserInputScreen)
@@ -242,15 +242,15 @@ def generate_test_instructions(session_info: dict):
    # Шаг 10: Итоговый экран с результатами (DisplayResultsScreen)
    # Шаг 11: Отправить 'exit' для завершения""")
     print(f"{Colors.RESET}")
-    
+
     print(f"\n{Colors.BOLD}Примеры тестов:{Colors.RESET}\n")
-    
+
     print("✅ Успешный сценарий:")
     print("   user_id=1, api_key=test-api-key-123")
-    
+
     print("\n❌ Тест валидации:")
     print("   user_id=\"\", api_key=\"\" (пустые значения)")
-    
+
     print("\n❌ Тест ошибки API:")
     print("   user_id=999999 (несуществующий пользователь)")
 
@@ -265,7 +265,7 @@ def save_workflow_to_json(workflow: dict, filename: str = "workflow_deployed.jso
 def main():
     """Основная функция"""
     print_header("🚀 ЗАГРУЗКА WORKFLOW С UI НА ТЕСТОВЫЙ СТЕНД")
-    
+
     # Проверяем сервер
     print_info("Проверка доступности сервера...")
     if not check_server():
@@ -273,52 +273,52 @@ def main():
         print_info("Запустите сервер: uvicorn api.app:app --host 127.0.0.1 --port 8080")
         sys.exit(1)
     print_success(f"Сервер доступен: {BASE_URL}")
-    
+
     # Загружаем workflow
     print_info("Загрузка workflow из модуля...")
     workflow = load_workflow_from_module()
-    
+
     stats = {
         "total": len(workflow["states"]),
         "screen": len([s for s in workflow["states"] if s["state_type"] == "screen"]),
         "integration": len([s for s in workflow["states"] if s["state_type"] == "integration"]),
         "technical": len([s for s in workflow["states"] if s["state_type"] == "technical"])
     }
-    
+
     print_success(f"Workflow загружен: {stats['total']} states")
     print_info(f"  • Screen: {stats['screen']}, Integration: {stats['integration']}, Technical: {stats['technical']}")
-    
+
     # Сохраняем локально
     save_workflow_to_json(workflow)
-    
+
     # Отправляем на сервер
     print_header("📤 СОХРАНЕНИЕ WORKFLOW НА СЕРВЕР")
     workflow_id = save_workflow_to_server(workflow)
-    
+
     if not workflow_id:
         print_error("Не удалось сохранить workflow")
         sys.exit(1)
-    
+
     # Создаем тестовую сессию
     print_header("🔧 СОЗДАНИЕ ТЕСТОВОЙ СЕССИИ")
     session_info = create_test_session(workflow_id)
-    
+
     if not session_info:
         print_error("Не удалось создать сессию")
         sys.exit(1)
-    
+
     # Отображаем информацию о первом экране
     display_screen_info(session_info["data"])
-    
+
     # Генерируем инструкции
     generate_test_instructions(session_info)
-    
+
     # Итоги
     print_header("🎉 ГОТОВО!")
     print_success("Workflow успешно развернут и готов к тестированию")
     print_info(f"Workflow ID: {workflow_id}")
     print_info(f"Session ID: {session_info['session_id']}")
-    
+
     print(f"\n{Colors.BOLD}Следующие шаги:{Colors.RESET}")
     print("  1. Используйте curl команды выше для тестирования")
     print("  2. Или подключите frontend приложение к этому workflow")

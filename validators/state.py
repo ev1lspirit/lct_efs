@@ -24,13 +24,13 @@ class AbstractMethodOrderPreserver(ABC, PreserveMethodOrderMeta):
 class StateValidator(ABC, AssertCallerMixin, metaclass=AbstractMethodOrderPreserver):
     state: StateModel = field(validator=v.instance_of(StateModel))
     context: set = field(validator=v.instance_of(set))
-    transtion_validator: TransitionValidator = field(
+    transition_validator: TransitionValidator = field(
         validator=v.instance_of(TransitionValidator), init=False)
 
     _expression_binding_key: ClassVar[str]
 
     def _assert_from_validators(self):
-        return self.transtion_validator.apply_assert()
+        return self.transition_validator.apply_assert()
 
     def _assert_binding_key(self):
         for expression in self.state.expressions:
@@ -71,7 +71,7 @@ class IntegrationStateValidator(StateValidator):
     _expression_binding_key: ClassVar[str] = "variable"
 
     def __attrs_post_init__(self):
-        self.transtion_validator = IntegrationTransitionValidator(self.state)
+        self.transition_validator = IntegrationTransitionValidator(self.state)
 
     def _assert_transition_count(self):
         if len(self.state.transitions) == 0:
@@ -97,7 +97,7 @@ class ScreenStateValidator(StateValidator):
     _expression_binding_key = "event_name"
 
     def __attrs_post_init__(self):
-        self.transtion_validator = ScreenTransitionValidator(self.state)
+        self.transition_validator = ScreenTransitionValidator(self.state)
 
     def _assert_all_transitions_bound(self):
         attr_callable = lambda expr: getattr(expr, self._expression_binding_key, None)
@@ -123,13 +123,13 @@ class ScreenStateValidator(StateValidator):
                     f"Event {transition.case} not found in provided events"
                 )
 
-
+@define
 class TechnicalStateValidator(StateValidator):
     _expression_binding_key = "variable"
 
 
     def __attrs_post_init__(self):
-        self.transtion_validator = TechnicalTransitionValidator(self.state)
+        self.transition_validator = TechnicalTransitionValidator(self.state)
 
     # def _assert_context_dependency(self):
     #     for expr in self.state.expressions:

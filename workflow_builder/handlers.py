@@ -3,13 +3,14 @@ from enum import Enum
 from functools import wraps
 import inspect
 import logging
-import re
 from urllib.parse import urlparse
 from attr import define, field
-from typing import TYPE_CHECKING, Any, Callable, Optional, TypeVar
+from typing import TYPE_CHECKING, Any, Awaitable, Callable, Optional, TypeVar
 from simpleeval import simple_eval
 
+from adapters.commonAdapter import APIError
 from utils import dump_context
+from workflow_builder.mixins import ParameterInterpolationMixin
 
 logger = logging.getLogger(__name__)
 
@@ -36,8 +37,7 @@ def check_context_consistency(function: Callable):
     if "self" not in func_sig.parameters:
         raise ValueError("Function must be a method")
 
-    @wraps(function)
-    def wrapper(self, *args, **kwargs):
+    def _shared_logic(self):
         if not isinstance(self, BaseHandler):
             raise TypeError(
                 f"Expected {BaseHandler.__name__}, got {type(self).__name__}"
@@ -54,13 +54,26 @@ def check_context_consistency(function: Callable):
                 raise ValueError(
                     f"Missing dependent variables in context: {missing_vars}"
                 )
+
+    if inspect.iscoroutinefunction(function):
+
+        @wraps(function)
+        async def wrapper_async(self, *args, **kwargs):
+            _shared_logic(self)
+            return await function(self, *args, **kwargs)
+
+        return wrapper_async
+
+    @wraps(function)
+    def wrapper(self, *args, **kwargs):
+        _shared_logic(self)
         return function(self, *args, **kwargs)
 
     return wrapper
 
 
+@define(slots=True)
 class BaseHandler(ABC):
-    __slots__ = ("metadata", "context")
     metadata: Any
     context: "SessionContext"
 
@@ -91,9 +104,9 @@ class TechnicalHandler(BaseHandler):
         # They often check for variable existence/validity, so we don't enforce dependent_variables
         try:
             return simple_eval(
-                self.metadata.expression, 
-                names=self.context.session, 
-                functions={"len": len, "sum": sum, "max": max, "min": min}
+                self.metadata.expression,
+                names=self.context.session,
+                functions={"len": len, "sum": sum, "max": max, "min": min},
             )
         except Exception as e:
             # If variable doesn't exist, treat as validation failure (False)
@@ -126,11 +139,13 @@ class DependencyHandler(BaseHandler):
         context_key = self.metadata.redis_client.get_wf_context_key(
             session_id=self.context._workflow_id
         )
-        if not self.metadata.redis_client.r.exists(context_key):
+        if not self.metadata.redis_client.redis.exists(context_key):
             workflow_context = self.metadata.mongo_client.get(self.context._workflow_id)
             if not isinstance(workflow_context, dict):
                 logger.error(f"Workflow context {self.context._workflow_id} not found")
-                raise ValueError(f"Workflow context for {self.context._workflow_id} not found")
+                raise ValueError(
+                    f"Workflow context for {self.context._workflow_id} not found"
+                )
 
             wf_context_json = dump_context(workflow_context)
             self.metadata.redis_client.set_workflow_context(
@@ -147,9 +162,9 @@ class DependencyHandler(BaseHandler):
 
 
 @define(slots=True)
-class IntegrationHandler(BaseHandler):
+class IntegrationHandler(ParameterInterpolationMixin, BaseHandler):
     adapter: Any  # CommonAdapter  # type: ignore[name-defined]
-    metadata: "IntegrationStateExpression"
+    metadata: Any
     context: "SessionContext"
 
     def _split_url(self, url=None):
@@ -160,138 +175,52 @@ class IntegrationHandler(BaseHandler):
         endpoint = parsed.path
         return base_url, endpoint
 
-    def _get_method(self, adapter):
+    def _get_method(self, adapter) -> Callable[[str, Any], Awaitable]:
         method_attr = getattr(adapter, self.metadata.method, None)
         if method_attr is None:
             raise ValueError(f"Method {self.metadata.method} not found in adapter")
         return method_attr
 
-    def _extract_variables(self, params: dict) -> list[str]:
-        """Извлекает список переменных из params в формате {{variable}}"""
-        pattern = r'\{\{(\w+)\}\}'
-        variables = set()
-        
-        def extract_from_value(value):
-            if isinstance(value, str):
-                matches = re.findall(pattern, value)
-                variables.update(matches)
-            elif isinstance(value, dict):
-                for v in value.values():
-                    extract_from_value(v)
-            elif isinstance(value, list):
-                for item in value:
-                    extract_from_value(item)
-        
-        for value in params.values():
-            extract_from_value(value)
-        
-        return list(variables)
+    def __process_api_error(self, response: APIError):
+        logger.error(f"API request failed: {response.message}")
+        if response.status_code:
+            logger.error(f"Status code: {response.status_code}")
+        if response.content:
+            logger.debug(f"Error response content: {response.content}")
 
-    def _interpolate_params(self, params: dict) -> dict:
-        """Заменяет {{variable}} на значения из context.session"""
-        pattern = r'\{\{(\w+)\}\}'
-        
-        def interpolate_value(value):
-            if isinstance(value, str):
-                # Находим все переменные в строке
-                matches = re.findall(pattern, value)
-                result = value
-                for var_name in matches:
-                    if var_name not in self.context.session:
-                        raise ValueError(
-                            f"Variable '{var_name}' not found in context. "
-                            f"Available variables: {list(self.context.session.keys())}"
-                        )
-                    context_value = self.context.session[var_name]
-                    # Заменяем {{var}} на значение
-                    result = result.replace(f"{{{{{var_name}}}}}", str(context_value))
-                return result
-            elif isinstance(value, dict):
-                return {k: interpolate_value(v) for k, v in value.items()}
-            elif isinstance(value, list):
-                return [interpolate_value(item) for item in value]
-            else:
-                return value
-        
-        return {key: interpolate_value(value) for key, value in params.items()}
+        # Если указана переменная для ошибки, сохраняем в контекст
+        if self.metadata.error_variable:
+            with self.context as ctx:
+                ctx[self.metadata.error_variable] = response.model_dump()
+            logger.info(
+                f"Error saved to context variable: {self.metadata.error_variable}"
+            )
+        # Возвращаем ошибку вместо исключения для возможности обработки в workflow
+        return response
 
-    @check_context_consistency
-    def result(self):  # type: ignore
-        # Интерполируем URL - заменяем {{variable}} в самом URL
-        interpolated_url = self.metadata.url
-        url_variables_found = []
-        for match in re.finditer(r'\{\{(\w+)\}\}', self.metadata.url):
-            var_name = match.group(1)
-            url_variables_found.append(var_name)
-            if var_name not in self.context.session:
-                raise ValueError(
-                    f"Variable '{var_name}' required in URL but not found in context. "
-                    f"Available variables: {list(self.context.session.keys())}"
-                )
-            context_value = self.context.session[var_name]
-            interpolated_url = interpolated_url.replace(f"{{{{{var_name}}}}}", str(context_value))
-        
-        if url_variables_found:
-            logger.debug(f"URL variables interpolated: {url_variables_found}")
-        
-        base_url, endpoint = self._split_url(interpolated_url)
-        logger.debug(f"Base URL: {base_url}, Endpoint: {endpoint}")
-        
-        # Интерполируем params или body в зависимости от метода
-        method = self.metadata.method.lower()
-        request_kwargs = {}
-        
-        if method in ['post', 'put', 'patch']:
-            # POST/PUT/PATCH используют body (передается как json в requests)
-            params_to_use = self.metadata.body or {}
-            interpolated_params = self._interpolate_params(params_to_use)
-            logger.info(f"Integration request: {self.metadata.method.upper()} {interpolated_url}")
-            logger.debug(f"Original body: {self.metadata.body}")
-            logger.debug(f"Interpolated body: {interpolated_params}")
-            # Для POST/PUT/PATCH передаем данные как json, а не params
-            request_kwargs['json'] = interpolated_params
-        else:
-            # GET/DELETE используют params (query string)
-            params_to_use = self.metadata.params or {}
-            interpolated_params = self._interpolate_params(params_to_use)
-            logger.info(f"Integration request: {self.metadata.method.upper()} {interpolated_url}")
-            logger.debug(f"Original params: {self.metadata.params}")
-            logger.debug(f"Interpolated params: {interpolated_params}")
-            request_kwargs['params'] = interpolated_params
-        
-        logger.debug(f"Request kwargs prepared: {list(request_kwargs.keys())}")
-        
-        adapter = self.adapter(base_url=base_url)
-        method_attr = self._get_method(adapter)
-        
-        logger.info(f"Executing adapter method: {self.metadata.method.upper()}")
-        response = method_attr(endpoint=endpoint, **request_kwargs)
-        
+    def __process_response(self, response):
         # Проверяем, является ли ответ ошибкой
-        if hasattr(response, 'error') and response.error:
-            logger.error(f"API request failed: {response.message}")
-            if hasattr(response, 'status_code') and response.status_code:
-                logger.error(f"Status code: {response.status_code}")
-            if hasattr(response, 'content') and response.content:
-                logger.debug(f"Error response content: {response.content}")
-            
-            # Если указана переменная для ошибки, сохраняем в контекст
-            if self.metadata.error_variable:
-                with self.context as ctx:
-                    ctx[self.metadata.error_variable] = {
-                        'error': True,
-                        'message': response.message,
-                        'status_code': getattr(response, 'status_code', None),
-                        'content': getattr(response, 'content', None)
-                    }
-                logger.info(f"Error saved to context variable: {self.metadata.error_variable}")
-            # Возвращаем ошибку вместо исключения для возможности обработки в workflow
-            return response
-        
-        logger.info(f"Integration response received successfully: {type(response).__name__}")
+        if isinstance(response, APIError):
+            return self.__process_api_error(response)
+        logger.info(
+            f"Integration response received successfully: {type(response).__name__}"
+        )
         if isinstance(response, dict):
             logger.debug(f"Response keys: {list(response.keys())}")
         elif isinstance(response, list):
             logger.debug(f"Response is a list with {len(response)} items")
-        
+
         return response
+
+    @check_context_consistency
+    async def result(self):  # type: ignore
+        interpolated_url = self.interpolate_url()
+        base_url, endpoint = self._split_url(interpolated_url)
+        logger.info(f"Base URL: {base_url}, Endpoint: {endpoint}")
+
+        request_kwargs = self.interpolate_params(interpolated_url)
+        adapter = self.adapter(base_url=base_url)
+        method_ = self._get_method(adapter)
+        logger.info(f"Executing adapter method: {self.metadata.method.upper()}")
+        response = await method_(endpoint=endpoint, **request_kwargs)
+        return self.__process_response(response)

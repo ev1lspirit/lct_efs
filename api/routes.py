@@ -1,58 +1,18 @@
 from datetime import datetime
-from typing import Any, Callable, Optional, Union
+from typing import Any, Callable
 from venv import logger
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from api.schema import SaveWorkflowRequest, WorkflowRequest
+from api.utils import _is_valid_session_id
 from storage.mongo.client import MongoDBClient, get_mongo_client_as_dependency
-from storage.redis.service import RedisCache, get_redis_cache
+from storage.redis.service import AsyncRedisCache, get_redis_cache
 from validators.automaton import AutomatonValidator
 from workflow_builder.automaton.automaton import Automaton
-from workflow_builder.state_parser.contract import StateSet
 from config import settings
 from workflow_builder.models import StateTypeEnum
-import re
+
 
 router = APIRouter()
-
-
-def _is_valid_session_id(session_id: str) -> bool:
-    """
-    Validate session_id format to prevent injection attacks
-    
-    Accepts:
-    - UUID format (with or without hyphens)
-    - Alphanumeric strings with hyphens/underscores (max 128 chars)
-    
-    Args:
-        session_id: Session identifier to validate
-        
-    Returns:
-        True if valid, False otherwise
-    """
-    if not session_id or not isinstance(session_id, str):
-        return False
-    
-    # Проверка длины (защита от DOS)
-    if len(session_id) > 128:
-        return False
-    
-    # Разрешаем UUID или буквенно-цифровые строки с дефисами/подчеркиваниями
-    # Запрещаем символы, которые могут быть использованы для инъекций
-    pattern = r'^[a-zA-Z0-9_-]+$'
-    
-    return bool(re.match(pattern, session_id))
-
-
-class WorkflowRequest(BaseModel):
-    client_session_id: str
-    client_workflow_id: Optional[str] = None
-    context: dict[str, Union[str, int, list, dict]] = {}
-    event_name: Optional[str] = None
-
-
-class SaveWorkflowRequest(BaseModel):
-    states: StateSet
-    predefined_context: dict[str, Any] = {}
 
 
 @router.post("/workflow/save")
@@ -80,6 +40,7 @@ async def save_workflow(
         breakpoint()
         validator = AutomatonValidator(states=body.states.states)
         validator.run()
+        #mongo_client = next(get_mongo_client_as_dependency())
         states_client = mongo_client(collection=settings.STATES_MONGO_COLLECTION)
         workflow_context_client = mongo_client(
             collection=settings.WORKFLOW_MONGO_COLLECTION
@@ -140,39 +101,35 @@ async def get_full_workflow(
         HTTPException: If workflow not found or retrieval fails
     """
     logger.info(f"Fetching full workflow data for ID: {workflow_id}")
-    
+
     try:
         states_client = mongo_client(collection=settings.STATES_MONGO_COLLECTION)
         workflow_data = states_client.get_workflow_with_context(workflow_id)
-        
+
         if not workflow_data:
             logger.warning(f"Workflow {workflow_id} not found")
             raise HTTPException(
-                status_code=404,
-                detail=f"Workflow with ID {workflow_id} not found"
+                status_code=404, detail=f"Workflow with ID {workflow_id} not found"
             )
-        
+
         logger.info(f"Successfully retrieved full workflow {workflow_id}")
-        return {
-            "status": "success",
-            "workflow_id": workflow_id,
-            "data": workflow_data
-        }
-        
+        return {"status": "success", "workflow_id": workflow_id, "data": workflow_data}
+
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error fetching full workflow {workflow_id}: {str(e)}", exc_info=True)
+        logger.error(
+            f"Error fetching full workflow {workflow_id}: {str(e)}", exc_info=True
+        )
         raise HTTPException(
-            status_code=500,
-            detail="Internal server error while fetching workflow"
+            status_code=500, detail="Internal server error while fetching workflow"
         )
 
 
 @router.post("/client/workflow")
 async def check_session(
     body: WorkflowRequest,
-    redis_cache: RedisCache = Depends(get_redis_cache),
+    redis_cache: AsyncRedisCache = Depends(get_redis_cache),
 ) -> dict[str, Any]:
     """
     Check/create client session and get/initialize workflow state
@@ -189,14 +146,15 @@ async def check_session(
     """
     logger.info(f"Processing workflow request for session: {body.client_session_id}")
 
+    #redis_cache = await get_redis_cache()
     try:
-        session_context = await _get_or_create_session(body, redis_cache)
+        await _get_or_create_session(body, redis_cache)
         automaton = Automaton(
             session_id=body.client_session_id, workflow_id=body.client_workflow_id
         )
-        screen_payload = automaton.run(body.event_name)
+        screen_payload = await automaton.run(body.event_name)
         # Получаем обновленный контекст после выполнения workflow
-        updated_context = redis_cache.get_session(body.client_session_id)
+        updated_context = await redis_cache.get_session(body.client_session_id)
         logger.info(
             f"Successfully processed workflow for session: {body.client_session_id}"
         )
@@ -263,12 +221,16 @@ async def _save_workflow_states(
         state_list = [state.model_dump() for state in body.states.states]
         workflow_data = {
             "states": state_list,
-            "predefined_context": body.predefined_context
+            "predefined_context": body.predefined_context,
         }
-        logger.debug(f"Saving {len(state_list)} states to MongoDB with new format validation")
-        
+        logger.debug(
+            f"Saving {len(state_list)} states to MongoDB with new format validation"
+        )
+
         # Save to MongoDB using new method with format validation
-        inserted_id = states_client.insert_workflow_with_format_validation(workflow_data)
+        inserted_id = states_client.insert_workflow_with_format_validation(
+            workflow_data
+        )
 
         if not inserted_id:
             logger.error("MongoDB returned no ID for inserted states document")
@@ -337,8 +299,9 @@ async def _save_workflow_context(
             detail=f"Database error while saving workflow context: {str(e)}",
         )
 
+
 async def _get_or_create_session(
-    body: WorkflowRequest, redis_cache: RedisCache
+    body: WorkflowRequest, redis_cache: AsyncRedisCache
 ) -> dict[str, Any]:
     """
     Retrieve existing session or create new one with validation
@@ -358,25 +321,24 @@ async def _get_or_create_session(
         logger.error(f"Invalid session_id format: {body.client_session_id}")
         raise HTTPException(
             status_code=400,
-            detail="Invalid session_id format. Expected UUID or alphanumeric string"
+            detail="Invalid session_id format. Expected UUID or alphanumeric string",
         )
-    
+
     # Атомарно получаем сессию (get_session теперь возвращает None если не существует)
-    session_context = redis_cache.get_session(body.client_session_id)
-    
+    session_context = await redis_cache.get_session(body.client_session_id)
+
     if session_context is not None:
-        return _handle_existing_session(body, redis_cache, session_context)
-    return _create_new_session(body, redis_cache)
+        return await _handle_existing_session(body, redis_cache, session_context)
+    return await _create_new_session(body, redis_cache)
 
 
-def _handle_existing_session(
-    body: WorkflowRequest, redis_cache: RedisCache, session_context: dict
+async def _handle_existing_session(
+    body: WorkflowRequest, redis_cache: AsyncRedisCache, session_context: dict
 ) -> dict[str, Any]:
     """Handle existing session retrieval and context updates"""
     logger.info(f"Session found: {body.client_session_id}")
-
     stored_workflow_id = session_context.get("__workflow_id")
-    
+
     # Проверка на отсутствие workflow_id в сессии (критическая ошибка)
     if not stored_workflow_id:
         logger.error(
@@ -384,10 +346,9 @@ def _handle_existing_session(
             "This indicates corrupted session data."
         )
         raise HTTPException(
-            status_code=500,
-            detail="Session data corrupted: missing workflow_id"
+            status_code=500, detail="Session data corrupted: missing workflow_id"
         )
-    
+
     # Проверка на попытку сменить workflow_id
     if body.client_workflow_id and body.client_workflow_id != stored_workflow_id:
         logger.warning(
@@ -395,7 +356,7 @@ def _handle_existing_session(
             f"{stored_workflow_id} -> {body.client_workflow_id}. Ignoring new workflow_id."
         )
         # Можно либо игнорировать, либо вернуть ошибку. Выберем игнорирование с предупреждением.
-    
+
     # Используем сохраненный workflow_id
     body.client_workflow_id = stored_workflow_id
 
@@ -403,18 +364,18 @@ def _handle_existing_session(
         f"Retrieved existing session. Current workflow: {body.client_workflow_id}, "
         f"Event: {body.event_name}"
     )
-    
+
     # Update session context if new context provided
     if body.context:
         logger.debug(f"Updating session context with: {body.context}")
         session_context.update(body.context)
-        redis_cache.update_session(body.client_session_id, session_context)
+        await redis_cache.update_session(body.client_session_id, session_context)
 
     return session_context
 
 
-def _create_new_session(
-    body: WorkflowRequest, redis_cache: RedisCache
+async def _create_new_session(
+    body: WorkflowRequest, redis_cache: AsyncRedisCache
 ) -> dict[str, Any]:
     """Create new session with validation"""
     if body.client_workflow_id is None:
@@ -422,18 +383,18 @@ def _create_new_session(
         raise HTTPException(
             status_code=400, detail="Workflow ID is required for new session"
         )
-    
+
     session_context = {
         "__workflow_id": body.client_workflow_id,
         "__created_at": str(datetime.now()),
     }
-    
+
     # Add initial context if provided
     if body.context:
         session_context.update(body.context)
 
     # Создаем сессию с TTL (по умолчанию 3600 секунд = 1 час)
-    redis_cache.update_session(body.client_session_id, session_context, ttl=3600)
+    await redis_cache.update_session(body.client_session_id, session_context, ttl=3600)
 
     logger.info(
         f"Created new session: {body.client_session_id} "

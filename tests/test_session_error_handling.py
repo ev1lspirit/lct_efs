@@ -1,6 +1,7 @@
 """
 Тесты для проверки обработки ошибок в client_session_id
 """
+
 import pytest
 from unittest.mock import Mock, patch, MagicMock
 from fastapi import HTTPException
@@ -8,10 +9,10 @@ from api.routes import (
     _get_or_create_session,
     _handle_existing_session,
     _create_new_session,
-    _is_valid_session_id,
-    WorkflowRequest,
 )
-from storage.redis.service import RedisCache
+from api.schema import WorkflowRequest
+from api.utils import _is_valid_session_id
+from storage.redis.service import AsyncRedisCache
 
 
 class TestSessionIdValidation:
@@ -64,7 +65,7 @@ class TestSessionRetrieval:
             client_session_id="../../malicious",
             client_workflow_id="test_workflow",
         )
-        redis_cache = Mock(spec=RedisCache)
+        redis_cache = Mock(spec=AsyncRedisCache)
 
         with pytest.raises(HTTPException) as exc_info:
             await _get_or_create_session(body, redis_cache)
@@ -79,7 +80,7 @@ class TestSessionRetrieval:
             client_session_id="valid-session-123",
             event_name="test_event",
         )
-        redis_cache = Mock(spec=RedisCache)
+        redis_cache = Mock(spec=AsyncRedisCache)
 
         # Сессия существует, но без workflow_id
         session_context = {"some_data": "value"}
@@ -98,7 +99,7 @@ class TestSessionRetrieval:
             client_workflow_id="new_workflow",
             event_name="test_event",
         )
-        redis_cache = Mock(spec=RedisCache)
+        redis_cache = Mock(spec=AsyncRedisCache)
 
         session_context = {
             "__workflow_id": "original_workflow",
@@ -124,7 +125,7 @@ class TestSessionRetrieval:
             client_session_id="new-session-123",
             client_workflow_id=None,  # Отсутствует!
         )
-        redis_cache = Mock(spec=RedisCache)
+        redis_cache = Mock(spec=AsyncRedisCache)
 
         with pytest.raises(HTTPException) as exc_info:
             _create_new_session(body, redis_cache)
@@ -140,14 +141,14 @@ class TestSessionRetrieval:
             client_workflow_id="test_workflow",
             context={"initial": "data"},
         )
-        redis_cache = Mock(spec=RedisCache)
+        redis_cache = Mock(spec=AsyncRedisCache)
 
         result = _create_new_session(body, redis_cache)
 
         # Проверяем, что update_session вызван с TTL
         redis_cache.update_session.assert_called_once()
         call_args = redis_cache.update_session.call_args
-        
+
         assert call_args[0][0] == "new-session-123"
         assert call_args[1]["ttl"] == 3600
 
@@ -163,7 +164,7 @@ class TestSessionRetrieval:
             client_session_id="existing-session",
             context={"new_field": "new_value"},
         )
-        redis_cache = Mock(spec=RedisCache)
+        redis_cache = Mock(spec=AsyncRedisCache)
 
         session_context = {
             "__workflow_id": "test_workflow",

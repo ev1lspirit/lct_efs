@@ -6,7 +6,7 @@ from bson import ObjectId
 
 from config import settings
 from storage.mongo.client import MongoDBClient
-from storage.redis.service import RedisCache
+from storage.redis.service import AsyncRedisCache
 from context import SessionContext
 from utils import GeneralPurposeSingletonMeta
 from workflow_builder.automaton.automaton import Automaton
@@ -17,33 +17,24 @@ WELCOME_SCREEN = {
     "id": "welcome-screen",
     "type": "Screen",
     "name": "Welcome",
-    "sections": {}
+    "sections": {},
 }
 
 CHECKOUT_SCREEN = {
     "id": "checkout-screen",
     "type": "Screen",
     "name": "Checkout",
-    "sections": {}
+    "sections": {},
 }
 
-EMPTY_SCREEN = {
-    "id": "empty-screen",
-    "type": "Screen",
-    "name": "Empty",
-    "sections": {}
-}
+EMPTY_SCREEN = {"id": "empty-screen", "type": "Screen", "name": "Empty", "sections": {}}
 
 SIMPLE_WORKFLOW_STATES = [
     {
         "state_type": "screen",
         "name": "WelcomeScreen",
-        "transitions": [
-            {"case": "proceed", "state_id": "EvaluateCart"}
-        ],
-        "expressions": [
-            {"event_name": "proceed"}
-        ],
+        "transitions": [{"case": "proceed", "state_id": "EvaluateCart"}],
+        "expressions": [{"event_name": "proceed"}],
         "initial_state": True,
         "final_state": False,
         "screen": WELCOME_SCREEN,
@@ -114,12 +105,16 @@ def redis_memory(monkeypatch):
         self.r = fakeredis.FakeRedis(server=fake_server)
 
     # Reset singleton so patched __init__ is applied
-    GeneralPurposeSingletonMeta._GeneralPurposeSingletonMeta__instances.pop(RedisCache, None)
-    monkeypatch.setattr(RedisCache, "__init__", fake_init)
+    GeneralPurposeSingletonMeta._GeneralPurposeSingletonMeta__instances.pop(
+        AsyncRedisCache, None
+    )
+    monkeypatch.setattr(AsyncRedisCache, "__init__", fake_init)
     # Ensure SessionContext uses the patched Redis client
-    SessionContext._redis_cache = RedisCache()
+    SessionContext._redis_cache = AsyncRedisCache()
     yield
-    GeneralPurposeSingletonMeta._GeneralPurposeSingletonMeta__instances.pop(RedisCache, None)
+    GeneralPurposeSingletonMeta._GeneralPurposeSingletonMeta__instances.pop(
+        AsyncRedisCache, None
+    )
 
 
 def _persist_workflow(workflow_states):
@@ -157,7 +152,7 @@ def _persist_workflow(workflow_states):
 def test_automaton_processes_screen_technical_sequence(mongo_memory, redis_memory):
     workflow_id = _persist_workflow(SIMPLE_WORKFLOW_STATES)
 
-    redis_cache = RedisCache()
+    redis_cache = AsyncRedisCache()
     session_id = "session-automaton"
 
     base_context = {
@@ -165,7 +160,9 @@ def test_automaton_processes_screen_technical_sequence(mongo_memory, redis_memor
         "cart_items": ["apple", "banana"],
     }
     redis_cache.update_session(session_id, base_context)
-    redis_cache.save_state(session_id, {"name": settings.SERVICE_INIT_STATE, "type": "service"})
+    redis_cache.save_state(
+        session_id, {"name": settings.SERVICE_INIT_STATE, "type": "service"}
+    )
 
     # First call: expect initial screen payload
     automaton = Automaton(session_id=session_id, workflow_id=workflow_id)

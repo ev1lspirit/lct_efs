@@ -1,15 +1,6 @@
-<<<<<<< HEAD
-from typing import Any, Literal, Optional, Union
-from pydantic import BaseModel, model_validator
-from workflow_builder.expressions import ServiceStateExpression, Expression
-=======
-from email.policy import default
-from re import S
 from typing import Any, Literal, Optional, Union
 from pydantic import BaseModel, Field, field_validator, model_validator
-from workflow_builder.expressions import ServiceStateExpression, Expression
 from workflow_builder.models import StateTypeEnum
->>>>>>> 8f528df (validators init)
 from workflow_builder.states import (
     IntegrationState,
     ScreenState,
@@ -39,19 +30,22 @@ class IntegrationExpressionModel(BaseModel):
     method: Literal["get", "post", "put", "delete", "patch"]
     dependent_variables: Optional[list[str]] = None
     error_variable: Optional[str] = None
-    
+
     @model_validator(mode='after')
     def validate_params_or_body(self):
         """Validation: GET/DELETE should use params, POST/PUT/PATCH should use body"""
         method = self.method.lower()
         
+        if self.dependent_variables is None:
+            self.dependent_variables = []
+
         if method in ['get', 'delete']:
             if self.body is not None:
                 raise ValueError(f"Method '{method}' should use 'params', not 'body'")
         elif method in ['post', 'put', 'patch']:
             if self.params is not None and self.body is None:
                 raise ValueError(f"Method '{method}' should use 'body', not 'params'")
-        
+
         return self
 
 
@@ -131,7 +125,7 @@ class StateSet(BaseModel):
         if isinstance(values, list):
             # If values is already a list, wrap it in a dict
             values = {"states": values}
-        
+
         states = values.get("states", [])
         if not states:
             return values

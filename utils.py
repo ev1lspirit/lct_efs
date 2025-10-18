@@ -1,5 +1,6 @@
 from functools import wraps
 import hashlib
+import inspect
 import json
 from config import settings
 import time
@@ -54,12 +55,22 @@ def field_typechecker(type_: Type[Any]):
     return inner_handler
 
 
-# def state_typechecker():
-#     return field_typechecker(type_=WorkflowState)
-
-
 def execute_safe(default_return=None, service_name: Optional[str] = None):
+
     def decorator(func):
+        if inspect.iscoroutinefunction(func):
+            @wraps(func)
+            async def wrapper_async(*args, **kwargs):
+                try:
+                    return await func(*args, **kwargs)
+                except Exception as e:
+                    if service_name:
+                        logger.error(f"{service_name} error in {func.__name__}: {e}")
+                    else:
+                        logger.error(f"Error in {func.__name__}: {e}")
+                    return default_return
+            return wrapper_async
+
         @wraps(func)
         def wrapper(*args, **kwargs):
             try:
@@ -70,7 +81,6 @@ def execute_safe(default_return=None, service_name: Optional[str] = None):
                 else:
                     logger.error(f"Error in {func.__name__}: {e}")
                 return default_return
-
         return wrapper
 
     return decorator
@@ -92,7 +102,7 @@ def prepare_context_response(context: dict):
         context = context.decode()
     if isinstance(context, str):
         return json.loads(context)
-    
+
     def safe_decode_value(v):
         """Safely decode value from Redis - try JSON first, then plain decode"""
         if v.startswith(b"{") or v.startswith(b"["):
@@ -102,7 +112,7 @@ def prepare_context_response(context: dict):
                 # If JSON parsing fails, return as string
                 return v.decode()
         return v.decode()
-    
+
     return {
         k.decode(): safe_decode_value(v)
         for k, v in context.items()
@@ -136,7 +146,7 @@ def dump_context(context_data: dict) -> dict:
     for key, value in context_data.items():
         if isinstance(key, (bytes, bytearray)):
             key = key.decode()
-        
+
         # Skip None values at top level or convert to string
         if value is None:
             dumped_context[key] = "None"

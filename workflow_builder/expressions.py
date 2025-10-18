@@ -3,7 +3,7 @@ from attr import define, field, validators
 from typing import Any, ClassVar, Optional
 
 from storage.mongo.client import MongoDBClient
-from storage.redis.service import RedisCache
+from storage.redis.service import AsyncRedisCache
 from workflow_builder.models import StateTypeEnum
 from workflow_builder.transitions import Transition
 import logging
@@ -211,7 +211,9 @@ class ScreenStateExpression(BaseStateExpression):
 
 @define(slots=True)
 class ServiceStateExpression(BaseStateExpression):
-    redis_client: RedisCache = field(validator=validators.instance_of(RedisCache))
+    redis_client: AsyncRedisCache = field(
+        validator=validators.instance_of(AsyncRedisCache)
+    )
     mongo_client: MongoDBClient = field(validator=validators.instance_of(MongoDBClient))
     type_: ClassVar[StateTypeEnum] = StateTypeEnum.service
 
@@ -304,8 +306,8 @@ class Expression:
         params: dict[str, Any] = None,
         body: dict[str, Any] = None,
         method: str = "get",
-        dependent_variables: list[str] = None,
-        error_variable: str = None
+        dependent_variables: list[str] = [],
+        error_variable: str = None,
     ) -> "IntegrationStateExpression":
         return IntegrationStateExpression(
             variable=variable,
@@ -313,8 +315,8 @@ class Expression:
             params=params,
             body=body,
             method=method,
-            dependent_variables=dependent_variables or [],
-            error_variable=error_variable
+            dependent_variables=dependent_variables,
+            error_variable=error_variable,
         )
 
     @classmethod
@@ -324,7 +326,7 @@ class Expression:
     @classmethod
     def service(cls, mongo_collection_name):
         return ServiceStateExpression(
-            redis_client=RedisCache(),
+            redis_client=AsyncRedisCache(),
             mongo_client=MongoDBClient(
                 database=settings.MONGO_DB, collection=mongo_collection_name
             ),

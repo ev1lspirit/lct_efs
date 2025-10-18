@@ -1,10 +1,25 @@
-import requests
-from requests.exceptions import RequestException, Timeout
+import asyncio
+import logging
+from attrs import define, field
+from functools import wraps
+from aiohttp import ClientTimeout, ClientError
 from pydantic import BaseModel, ValidationError
 from typing import Type, TypeVar, Any
-import time
+import aiohttp
 
 T = TypeVar("T", bound=BaseModel)
+logger = logging.getLogger(__name__)
+
+
+class User(BaseModel):
+    id: int
+    role: str
+    email: str
+    password: str
+    lastName: str
+    firstName: str
+    address: str
+    rating: float
 
 
 class APIError(BaseModel):
@@ -13,18 +28,59 @@ class APIError(BaseModel):
     message: str | None = None
     content: Any | None = None
 
+def async_retry(method):
+    @wraps(method)
+    async def wrapper(self, *args, **kwargs):
+        for attempt in range(1, self.retries + 1):
+            try:
+                return await method(self, *args, **kwargs)
+            except (ClientError, asyncio.TimeoutError) as e:
+                url = f"{self.base_url}/{args[1]}"
+                logger.error(f"API request to {url} failed: {e}")
+                if attempt == self.retries:
+                    return APIError(error=True, message=str(e))
+                await asyncio.sleep(self.backoff * attempt)
+    return wrapper
 
+@define
 class CommonAdapter:
-    def __init__(self, base_url: str, default_headers: dict | None = None,
-                 timeout: int = 10, retries: int = 3, backoff: float = 1.0):
-        self.base_url = base_url.rstrip("/")
-        self.session = requests.Session()
-        self.session.headers.update(default_headers or {})
-        self.timeout = timeout
-        self.retries = retries
-        self.backoff = backoff
+    base_url: str = field(converter=lambda x: x.rstrip("/"))
+    headers: dict | None = field(default=None)
+    timeout: int = field(default=10)
+    retries: int = field(default=3)
+    backoff: float = field(default=1.0)
 
-    def _request_handler(
+
+    @property
+    def default_headers(self) -> dict[str, str]:
+        return {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        }
+
+    async def __process_response(self, response: aiohttp.ClientResponse, response_model: Type[T] | None = None):
+        try:
+            data = await response.json()
+        except ValueError:
+            return await response.text()
+
+        if isinstance(data, list):
+            return data
+
+        if isinstance(data, dict) and response_model:
+            try:
+                return response_model.model_validate(data)
+            except ValidationError as e:
+                return APIError(
+                    error=True,
+                    status_code=response.status,
+                    message=f"Schema validation failed: {e}",
+                    content=data,
+                )
+        return data
+
+    @async_retry
+    async def _request_handler(
         self,
         method: str,
         endpoint: str,
@@ -32,58 +88,34 @@ class CommonAdapter:
         **kwargs
     ) -> Any:
         url = f"{self.base_url}/{endpoint.lstrip('/')}"
+        async with aiohttp.ClientSession() as session:
+            session_method = getattr(session, method)
+            async with session_method(
+                url,
+                json=kwargs,
+                headers=self.headers or self.default_headers,
+                timeout=ClientTimeout(self.timeout),
+                ssl=False
+            ) as response:
+                return await self.__process_response(response, response_model)
 
-        for attempt in range(1, self.retries + 1):
-            try:
-                resp = self.session.request(method, url, timeout=self.timeout, **kwargs)
-                resp.raise_for_status()
+    async def get(self, endpoint: str, response_model: Type[T] | None = None, **kwargs):
+        return await self._request_handler("get", endpoint, response_model, **kwargs)
 
-                try:
-                    data = resp.json()
-                except ValueError:
-                    return resp.text
+    async def post(self, endpoint: str, response_model: Type[T] | None = None, **kwargs):
+        return await self._request_handler("post", endpoint, response_model, **kwargs)
 
-                # если массив → возвращаем список как есть
-                if isinstance(data, list):
-                    return data
+    async def put(self, endpoint: str, response_model: Type[T] | None = None, **kwargs):
+        return await self._request_handler("put", endpoint, response_model, **kwargs)
 
-                # если объект и указана модель → мапим
-                if isinstance(data, dict) and response_model:
-                    try:
-                        return response_model.model_validate(data)
-                    except ValidationError as e:
-                        return APIError(
-                            error=True,
-                            status_code=resp.status_code,
-                            message=f"Schema validation failed: {e}",
-                            content=data,
-                        )
+    async def delete(self, endpoint: str, response_model: Type[T] | None = None, **kwargs):
+        return await self._request_handler("delete", endpoint, response_model, **kwargs)
 
-                # если объект без модели → возвращаем dict
-                return data
 
-            except (RequestException, Timeout) as e:
-                if attempt == self.retries:
-                    return APIError(error=True, message=str(e))
-                time.sleep(self.backoff * attempt)
+async def main():
+    ca = CommonAdapter("https://sandkittens.me")
+    print(await ca.get("healthcheck", response_model=User))
 
-            except requests.HTTPError as e:
-                return APIError(
-                    error=True,
-                    status_code=resp.status_code if 'resp' in locals() else None,
-                    message=str(e),
-                    content=resp.text if 'resp' in locals() else None,
-                )
 
-    # Методы-обертки
-    def get(self, endpoint: str, response_model: Type[T] | None = None, **kwargs):
-        return self._request_handler("get", endpoint, response_model, **kwargs)
-
-    def post(self, endpoint: str, response_model: Type[T] | None = None, **kwargs):
-        return self._request_handler("post", endpoint, response_model, **kwargs)
-
-    def put(self, endpoint: str, response_model: Type[T] | None = None, **kwargs):
-        return self._request_handler("put", endpoint, response_model, **kwargs)
-
-    def delete(self, endpoint: str, response_model: Type[T] | None = None, **kwargs):
-        return self._request_handler("delete", endpoint, response_model, **kwargs)
+if __name__ == "__main__":
+    asyncio.run(main())

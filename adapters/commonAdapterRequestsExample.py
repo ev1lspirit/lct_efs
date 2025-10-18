@@ -4,18 +4,8 @@
 """
 from pydantic import BaseModel
 
-from commonAdapter import CommonAdapter
+from adapters.commonAdapter import CommonAdapter
 
-
-class User(BaseModel):
-    id: int
-    role: str
-    email: str
-    password: str
-    lastName: str
-    firstName: str
-    address: str
-    rating: float
 
 
 ca = CommonAdapter("https://sandkittens.me/api/v1")
