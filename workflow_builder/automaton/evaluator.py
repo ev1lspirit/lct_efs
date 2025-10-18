@@ -83,7 +83,7 @@ class ExpressionEvaluatorMixin:
             except Exception as e:
                 raise RuntimeError(f"Failed to evaluate expression: {str(e)}")
 
-    def evaluator(self, event_name: str = None) -> Callable[[], CoroutineType[Any, Any, None]] | partial[CoroutineType[Any, Any, None]]:
+    def evaluator(self, event_name: str = None):
         if self.current_state.type_ == StateTypeEnum.service:
             return self._evaluate_service_executables
         return partial(self._evaluate_executables, event_name)
