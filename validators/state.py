@@ -46,6 +46,10 @@ class StateValidator(ABC, AssertCallerMixin, metaclass=AbstractMethodOrderPreser
         transition_binds = defaultdict(list)
         marked_transitions = set()
         for transition in self.state.transitions:
+            # Skip transitions without variable (used in screen/technical states)
+            if transition.variable is None:
+                continue
+            
             if transition.variable in expressions:
                 matching_expressions = [
                     expression

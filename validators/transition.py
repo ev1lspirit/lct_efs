@@ -36,10 +36,19 @@ class IntegrationTransitionValidator(TransitionValidator):
 
 
 class TechnicalTransitionValidator(TransitionValidator):
-    ...
+    
+    def _assert_type_dependent_structure(self):
+        # Technical transitions can have variable = None (for unconditional transitions)
+        # So we skip the variable validation for technical states
+        pass
 
 
 class ScreenTransitionValidator(TransitionValidator):
+
+    def _assert_type_dependent_structure(self):
+        # Screen transitions don't use variable field, they use case (event)
+        # So we skip the variable validation for screen states
+        pass
 
     def _assert_deterministic(self):
         events = set()
