@@ -1,6 +1,6 @@
 # 🚀 LCT EFS - Workflow Management System
 
-> **🔐 Обновление безопасности (16.10.2025)**: Исправлены критические проблемы обработки сессий. См. [SESSION_FIXES_SUMMARY.md](docs/SESSION_FIXES_SUMMARY.md)
+> **🔧 Последнее обновление (17.10.2025)**: Исправлена критическая ошибка IntegrationHandler (POST/PUT/PATCH теперь используют body вместо params), добавлен TTL для Redis сессий, проведена очистка документации.
 
 ## 📋 Описание проекта
 
@@ -12,7 +12,7 @@ LCT EFS (Workflow Management System) - это современная платф�
 - 🔄 **Автомат состояний** - автоматическое управление переходами между состояниями
 - 🖥️ **Динамические экраны** - автоматическая генерация UI на основе конфигурации
 - 🌐 **Интеграции с API** - поддержка внешних HTTP-интеграций с интерполяцией переменных
-- 💾 **Управление контекстом** - хранение состояния сессии в Redis
+- 💾 **Управление контекстом** - хранение состояния сессии в Redis с автоматическим TTL
 - 📱 **Multi-platform** - поддержка веб и мобильных клиентов
 - 🔧 **Extensible** - легко расширяемая архитектура
 - 🔐 **Безопасность** - валидация session_id, защита от инъекций, автоматическое продление TTL
@@ -23,11 +23,11 @@ LCT EFS (Workflow Management System) - это современная платф�
 
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Client Layer  │    │   API           │    │  Core Engine    │
+│   Client Layer  │    │   API Layer     │    │  Core Engine    │
 │                 │    │                 │    │                 │
 │ • React/Vue     │───▶│ • FastAPI       │───▶│ • Automaton     │
 │ • Mobile App    │    │ • CORS          │    │ • State Parser  │
-│ • Demo HTML     │    │ • Routes        │    │ • Context Mgr   │
+│ • Demo HTML     │    │ • Routes        │    │ • Expressions   │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
                                                        │
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
@@ -35,21 +35,28 @@ LCT EFS (Workflow Management System) - это современная платф�
 │                 │    │                 │    │                 │
 │ • Screen        │◀───│ • Redis Cache   │    │ • HTTP Adapters │
 │ • Technical     │    │ • MongoDB       │    │ • External APIs │
-│ • Integration   │    │ • PostgreSQL    │    │ • JSON Placeholder│
+│ • Integration   │    │ • PostgreSQL    │    │ • RESTful       │
 │ • Service       │    │                 │    │                 │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
 ```
 
 ### Типы состояний
 
-1. **Screen** - Состояния пользовательского интерфейса
-2. **Technical** - Бизнес-логика и вычисления
-3. **Integration** - Интеграция с внешними API
-4. **Service** - Системные операции
+1. **Screen** - Состояния пользовательского интерфейса с секциями (header, body, footer)
+2. **Technical** - Бизнес-логика и вычисления на основе выражений
+3. **Integration** - Интеграция с внешними API (GET/POST/PUT/DELETE/PATCH)
+4. **Service** - Системные операции (`__service_init`, `__service_error`)
 
 ## 🚀 Быстрый старт
 
-### 1. Установка зависимостей
+### 1. Предварительные требования
+
+- Python 3.10+
+- Docker и Docker Compose
+- Redis 6.0+
+- MongoDB 4.4+
+
+### 2. Установка зависимостей
 
 ```bash
 # Создание виртуального окружения
@@ -59,31 +66,35 @@ python -m venv .venv
 .venv\Scripts\activate
 
 # Установка зависимостей
-pip install -r deployments/requirements.txt
+python -m pip install -r deployments\requirements.txt
 ```
 
-### 2. Запуск инфраструктуры
+
+### 3. Запуск инфраструктуры
 
 ```bash
 # Запуск Redis и MongoDB через Docker
-docker-compose up -d
+docker-compose -f deployments\docker-compose.yaml up -d
+
+# Проверка статуса контейнеров
+docker-compose -f deployments\docker-compose.yaml ps
 ```
 
-### 3. Запуск API сервера
+### 4. Запуск API сервера
 
 ```bash
-# Развертывание в режиме разработки
-uvicorn api.app:app --reload --port 8080
+# Запуск с auto-reload
+python -m uvicorn api.app:app --reload --port 8080
 
 # Сервер будет доступен по адресу http://localhost:8080
+# Документация API: http://localhost:8080/docs
 ```
 
-### 4. Проверка работоспособности
+### 5. Проверка работоспособности
 
 ```bash
 # Проверка health check
 curl http://localhost:8080/healthcheck
-
 # Ответ: {"status": "ok"}
 ```
 
@@ -107,11 +118,17 @@ curl http://localhost:8080/healthcheck
 ```json
 {
   "current_state": "state_name",
-  "context": {},
+  "context": {
+    "variable1": "value1"
+  },
   "screen": {
     "id": "screen-id",
     "type": "Screen",
-    "sections": {...}
+    "sections": {
+      "header": {},
+      "body": {},
+      "footer": {}
+    }
   },
   "status": "success"
 }
@@ -130,12 +147,32 @@ curl http://localhost:8080/healthcheck
         "state_type": "screen",
         "name": "login_screen",
         "initial_state": true,
-        "transitions": [...],
-        "screen": {...}
+        "transitions": [
+          {
+            "case": "submit",
+            "state_id": "next_state"
+          }
+        ],
+        "screen": {
+          "id": "screen-1",
+          "type": "Screen",
+          "sections": {}
+        }
       }
     ]
   },
-  "predefined_context": {}
+  "predefined_context": {
+    "app_version": "1.0.0"
+  }
+}
+```
+
+**Ответ:**
+```json
+{
+  "workflow_id": "507f1f77bcf86cd799439011",
+  "screens_saved": 1,
+  "context_saved": true
 }
 ```
 
@@ -155,11 +192,7 @@ curl http://localhost:8080/healthcheck
       "state_id": "next_state_name"
     }
   ],
-  "expressions": [
-    {
-      "event_name": "event_name"
-    }
-  ]
+  "expressions": []
 }
 ```
 
@@ -169,14 +202,37 @@ curl http://localhost:8080/healthcheck
 {
   "state_type": "screen",
   "name": "UserInputScreen",
+  "initial_state": false,
+  "final_state": false,
+  "transitions": [
+    {"case": "submit", "state_id": "ProcessData"}
+  ],
   "screen": {
     "id": "screen-user-input",
     "type": "Screen",
-    "name": "Поиск пользователя",
+    "name": "Ввод данных",
     "sections": {
-      "header": {...},
-      "body": {...},
-      "footer": {...}
+      "header": {
+        "title": "Введите ваши данные"
+      },
+      "body": {
+        "fields": [
+          {
+            "id": "username",
+            "type": "text",
+            "label": "Имя пользователя"
+          }
+        ]
+      },
+      "footer": {
+        "buttons": [
+          {
+            "id": "submit_btn",
+            "label": "Отправить",
+            "event": "submit"
+          }
+        ]
+      }
     }
   }
 }
@@ -187,82 +243,76 @@ curl http://localhost:8080/healthcheck
 ```json
 {
   "state_type": "integration",
-  "name": "CallExternalAPI",
-  "integration": {
-    "method": "GET",
-    "url": "https://api.example.com/users/{{context.user_id}}",
-    "headers": {
-      "Authorization": "Bearer {{context.token}}"
+  "name": "FetchUserData",
+  "initial_state": false,
+  "final_state": false,
+  "transitions": [
+    {"case": "default", "state_id": "ShowResults"}
+  ],
+  "expressions": [
+    {
+      "variable": "user_data",
+      "method": "get",
+      "url": "https://jsonplaceholder.typicode.com/users/{{context.user_id}}",
+      "dependent_variables": ["user_id"],
+      "error_variable": "api_error"
     }
-  }
+  ]
+}
+```
+
+**⚠️ Важно:** 
+- Методы `GET`, `DELETE` используют `params` для параметров
+- Методы `POST`, `PUT`, `PATCH` используют `body` для данных
+
+### Пример Technical состояния
+
+```json
+{
+  "state_type": "technical",
+  "name": "CalculateTotal",
+  "transitions": [
+    {"case": "default", "state_id": "ShowTotal"}
+  ],
+  "expressions": [
+    {
+      "variable": "total",
+      "dependent_variables": ["price", "quantity"],
+      "expression": "context['price'] * context['quantity']"
+    }
+  ]
 }
 ```
 
 ## 📂 Структура проекта
 
 ```
-# lct_efs - Workflow Engine
-
-Движок для выполнения workflow (конечных автоматов) с поддержкой различных типов состояний: screen, technical, integration и service.
-
-## 🚀 Быстрый старт
-
-### Установка зависимостей
-```bash
-./.venv/bin/python -m pip install -r deployments/requirements.txt
-```
-
-### Запуск инфраструктуры
-```bash
-docker-compose -f deployments/docker-compose.yaml up -d
-```
-
-### Запуск API
-```bash
-./.venv/bin/python -m uvicorn api.app:app --reload --port 8080
-```
-
-### Запуск тестов
-```bash
-./.venv/bin/python -m pytest
-```
-
-## 📚 Ключевые компоненты
-
-- **Workflow Builder** (`workflow_builder/`) - парсинг и выполнение workflow
-- **API** (`api/`) - FastAPI endpoints для управления workflow
-- **Storage** (`storage/`) - адаптеры для MongoDB и Redis
-- **Tests** (`tests/`) - end-to-end и unit тесты
-
-## 🔧 Конфигурация
-
-Создайте `.env` файл с настройками:
-```env
-MONGO_DB=test
-MONGO_URL=mongodb://localhost:27017
-REDIS_URL=redis://localhost:6379/0
-```
-
-## 📖 Документация
-
-См. `docs/` для детальной документации и `.github/copilot-instructions.md` для AI-ассистентов./
-├── api/                    # FastAPI приложение
-│   ├── app.py             # Основное приложение
-│   ├── routes.py          # API маршруты
-│   ├── schema.py          # Pydantic схемы
-│   └── test_*.py          # Интеграционные тесты
-├── adapters/              # Адаптеры для внешних API
-├── docs/                  # Документация
-├── diagrams/              # Диаграммы архитектуры
-├── storage/               # Слой работы с БД
-│   ├── mongo/            # MongoDB клиент
-│   ├── redis/            # Redis клиент
-│   └── postgres/         # PostgreSQL клиент
-├── fsm/                   # Finite State Machine
-├── workflow_builder/      # Ядро workflow engine
-├── tests/                 # Тесты
-├── deployments/          # Docker и деплой
-└── examples/             # Примеры использования
+lct_efs/
+├── api/                      # FastAPI приложение
+│   ├── app.py               # Основное приложение с CORS
+│   ├── routes.py            # API endpoints
+│   ├── schema.py            # Pydantic схемы
+│   └── tests/               # Интеграционные тесты
+├── workflow_builder/        # Ядро workflow engine
+│   ├── automaton/          # Реализация автомата
+│   ├── state_parser/       # Парсинг JSON в StateModel
+│   ├── expressions.py      # Обработка выражений
+│   ├── models.py           # Базовые модели
+│   └── states.py           # Типы состояний
+├── storage/                 # Слой работы с БД
+│   ├── mongo/              # MongoDB клиент
+│   ├── redis/              # Redis клиент с TTL
+│   └── postgres/           # PostgreSQL клиент
+├── adapters/               # HTTP адаптеры для интеграций
+├── docs/                   # Документация
+│   └── FIX_CUTE_IMAGES_TRANSITION.md
+├── deployments/            # Docker и зависимости
+│   ├── docker-compose.yaml
+│   ├── Dockerfile
+│   └── requirements.txt
+├── tests/                  # End-to-end тесты
+├── config.py              # Настройки проекта
+└── utils.py               # Утилиты и логирование
 ```
 
 ## 🧪 Тестирование
@@ -271,27 +321,38 @@ REDIS_URL=redis://localhost:6379/0
 
 ```bash
 # Все тесты
-pytest
+python -m pytest
+
+# Конкретный тест
+python -m pytest test_new_format.py -v
 
 # Интеграционные тесты
-pytest api/test_integration_workflow.py -v
+python -m pytest tests/test_automaton_end_to_end.py -v
 
-# Тесты интерполяции
-pytest tests/test_integration_interpolation.py -v
+# Тесты с выводом логов
+python -m pytest -v -s
 ```
 
-### Ручное тестирование
+### Примеры тестов
+
+Проект содержит различные типы тестов:
+- `test_new_format.py` - тесты сохранения workflow в MongoDB
+- `tests/test_automaton_end_to_end.py` - end-to-end тесты автомата
+- `tests/test_integration_interpolation.py` - тесты интерполяции переменных
+- `tests/test_session_error_handling.py` - тесты обработки ошибок сессий
+
+### Ручное тестирование через curl
 
 ```bash
-# Пример запроса
-curl -X POST http://localhost:8080/client/workflow \
-  -H "Content-Type: application/json" \
-  -d '{
-    "client_session_id": "test-session-123",
-    "client_workflow_id": "68de6c82acbc353520543bd1",
-    "context": {},
-    "event_name": null
-  }'
+# Инициализация workflow
+curl -X POST http://localhost:8080/client/workflow ^
+  -H "Content-Type: application/json" ^
+  -d "{\"client_session_id\":\"test-123\",\"client_workflow_id\":\"507f1f77bcf86cd799439011\",\"context\":{},\"event_name\":null}"
+
+# Отправка события
+curl -X POST http://localhost:8080/client/workflow ^
+  -H "Content-Type: application/json" ^
+  -d "{\"client_session_id\":\"test-123\",\"client_workflow_id\":\"507f1f77bcf86cd799439011\",\"context\":{},\"event_name\":\"submit\"}"
 ```
 
 ## 🌐 Интеграция с клиентами
@@ -323,58 +384,71 @@ class WorkflowClient {
     return `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
   }
 }
-```
 
-### Использование
-
-```javascript
+// Использование
 const client = new WorkflowClient();
-
-// Инициализация workflow
 const result = await client.executeWorkflow('workflow-id-123');
-
-// Обработка события
-const nextResult = await client.executeWorkflow('workflow-id-123', 'submit_form', {
-  username: 'john_doe',
-  email: 'john@example.com'
-});
+console.log('Current state:', result.current_state);
 ```
 
 ## 🔄 Жизненный цикл обработки
 
-1. **Получение запроса** - API получает запрос от клиента
-2. **Проверка сессии** - Проверка/создание сессии в Redis
-3. **Загрузка workflow** - Получение конфигурации из MongoDB
-4. **Инициализация автомата** - Создание экземпляра Automaton
-5. **Выполнение состояния** - Обработка текущего состояния
-6. **Обновление контекста** - Сохранение изменений в Redis
-7. **Возврат результата** - Отправка ответа клиенту
+1. **Получение запроса** - FastAPI принимает POST запрос на `/client/workflow`
+2. **Проверка сессии** - Redis проверяет существующую сессию или создает новую с TTL
+3. **Загрузка workflow** - MongoDB возвращает конфигурацию состояний
+4. **Парсинг workflow** - `StateParser` преобразует JSON в `StateModel`
+5. **Инициализация автомата** - Создается экземпляр `Automaton`
+6. **Выполнение состояния** - Обработка текущего состояния (screen/technical/integration)
+7. **Обработка выражений** - Интерполяция переменных и вычисления
+8. **Переход по транзициям** - Определение следующего состояния
+9. **Обновление контекста** - Сохранение в Redis с продлением TTL
+10. **Возврат результата** - JSON ответ клиенту
 
-## 📊 Мониторинг и логирование
+## 📊 Последние изменения (17.10.2025)
 
-Система использует структурированное логирование с цветовой схемой:
+### ✅ Исправления
 
-- 🔍 **DEBUG** - Детальная отладочная информация
-- ✅ **INFO** - Общая информация о выполнении
-- ⚠️ **WARNING** - Предупреждения
-- ❌ **ERROR** - Ошибки выполнения
-- 🚨 **CRITICAL** - Критические ошибки
+1. **Critical Fix: IntegrationHandler**
+   - `POST/PUT/PATCH` теперь отправляют данные в `body` (не в query string)
+   - `GET/DELETE` используют `params` для query параметров
+   - Добавлена валидация на уровне `IntegrationExpressionModel`
+
+2. **Redis TTL для сессий**
+   - `create_session()` устанавливает TTL (по умолчанию 3600s)
+   - `update_session()` автоматически продлевает TTL
+   - `get_session()` проверяет истечение и возвращает `None` для истекших сессий
+
+3. **Улучшенное логирование**
+   - Интерполированные переменные в URL
+   - Разделение base_url и endpoint
+   - Детальные логи request kwargs (json vs params)
+   - Логирование ошибок с status_code и content
 
 ## 🛠️ Разработка
 
 ### Добавление нового типа состояния
 
-1. Определите новый enum в `workflow_builder/models.py`
-2. Добавьте обработчик в `Automaton`
-3. Создайте соответствующую схему валидации
-4. Обновите документацию
+1. Добавьте enum в `workflow_builder/models.py`:
+```python
+class StateTypeEnum(str, Enum):
+    SCREEN = "screen"
+    TECHNICAL = "technical"
+    INTEGRATION = "integration"
+    SERVICE = "service"
+    YOUR_NEW_TYPE = "your_new_type"  # новый тип
+```
 
-### Создание нового адаптера
+2. Создайте класс состояния в `workflow_builder/states.py`
+3. Добавьте обработчик в `workflow_builder/automaton/`
+4. Обновите `STATE_CLASSES` в `state_parser/contract.py`
+5. Создайте тесты
 
-1. Наследуйтесь от базового класса в `adapters/`
-2. Реализуйте необходимые методы
-3. Добавьте конфигурацию
-4. Создайте тесты
+### Создание нового HTTP адаптера
+
+1. Наследуйтесь от `commonAdapter.py`
+2. Реализуйте методы `get()`, `post()`, `put()`, `delete()`
+3. Добавьте интерполяцию через `{{context.variable}}`
+4. Добавьте error handling с `error_variable`
 
 ## 🐳 Развертывание
 
@@ -382,39 +456,47 @@ const nextResult = await client.executeWorkflow('workflow-id-123', 'submit_form'
 
 ```bash
 # Сборка образа
-docker build -f deployments/Dockerfile -t lct-efs:latest .
+docker build -f deployments\Dockerfile -t lct-efs:latest .
 
 # Запуск контейнера
-docker run -p 8080:8080 lct-efs:latest
+docker run -p 8080:8080 --env-file .env lct-efs:latest
 ```
 
-### Docker Compose
+### Docker Compose (рекомендуется)
 
 ```bash
-# Полное развертывание с БД
-docker-compose -f deployments/docker-compose.yaml up -d
+# Полное развертывание с инфраструктурой
+docker-compose -f deployments\docker-compose.yaml up -d
+
+# Просмотр логов
+docker-compose -f deployments\docker-compose.yaml logs -f
+
+# Остановка
+docker-compose -f deployments\docker-compose.yaml down
 ```
 
-### Kubernetes
 
-```bash
-# Применение манифестов
-kubectl apply -f deployments/middle_back_deployment.yaml
-```
 
 ## 📈 Производительность
 
-- **Redis** используется для быстрого доступа к контексту сессий
-- **MongoDB** оптимизирован для хранения JSON-конфигураций
-- **Асинхронная обработка** через FastAPI
-- **Кэширование** workflow конфигураций
+- **Redis** - кэширование сессий и контекста с автоматическим TTL
+- **MongoDB** - хранение JSON workflow с индексами
+- **FastAPI** - асинхронная обработка запросов
+- **Пулинг соединений** - для MongoDB и Redis
 
 ## 🔒 Безопасность
 
-- CORS middleware для веб-безопасности
-- Валидация входных данных через Pydantic
-- Изоляция сессий через уникальные идентификаторы
-- Контроль доступа к внешним API
+- ✅ CORS middleware для веб-безопасности
+- ✅ Валидация входных данных через Pydantic
+- ✅ Изоляция сессий через UUID
+- ✅ URL-encoding паролей в connection strings
+- ✅ Автоматическое истечение сессий (TTL)
+- ✅ Защита от SQL/NoSQL инъекций
 
-**Версия:** 1.0.0  
-**Последнее обновление:** 02.10.2025
+## 📚 Документация
+
+- `docs/FIX_CUTE_IMAGES_TRANSITION.md` - примеры интеграционных состояний
+- `.github/copilot-instructions.md` - руководство для разработчиков
+- `CHANGELOG_2025_10_17.md` - последние изменения
+- API документация доступна по `/docs` после запуска сервера
+
